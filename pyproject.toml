@@ -1,0 +1,53 @@
+[build-system]
+requires = ["hatchling>=1.22"]
+build-backend = "hatchling.build"
+
+[project]
+name = "tennisvision"
+version = "0.1.0"
+description = "Computer Vision in Tennis"
+readme = "README.md"
+requires-python = ">=3.11,<3.13"
+license = { text = "MIT" }
+authors = [{ name = "Aleksandra Ciesińska" }]
+
+dependencies = [
+  "numpy>=1.26",
+  "pillow>=10",
+  "tqdm>=4.66",
+  "scikit-learn>=1.4",
+  "matplotlib>=3.8",
+  "pyyaml>=6",
+  "rich>=13",
+  "torch>=2.3",
+  "torchvision>=0.18",
+  "albumentations>=2.0.8",
+]
+
+[dependency-groups]
+dev = [
+  "pytest>=8",
+  "ruff>=0.6",
+  "mypy>=1.8",
+  "pre-commit>=3.6",
+]
+video = [
+  "opencv-python>=4.9",
+  "pandas>=2.2",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/tennisvision"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.mypy]
+python_version = "3.11"
+warn_unused_ignores = true
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
