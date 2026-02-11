@@ -21,7 +21,11 @@ dependencies = [
   "rich>=13",
   "torch>=2.3",
   "torchvision>=0.18",
+  "torchmetrics",
+  "ruff",
   "albumentations>=2.0.8",
+  "mlflow>=3.9.0",
+  "logging>=0.4.9.6",
 ]
 
 [dependency-groups]
@@ -30,6 +34,7 @@ dev = [
   "ruff>=0.6",
   "mypy>=1.8",
   "pre-commit>=3.6",
+  "mlflow>=3.9.0",
 ]
 video = [
   "opencv-python>=4.9",
@@ -39,9 +44,25 @@ video = [
 [tool.hatch.build.targets.wheel]
 packages = ["src/tennisvision"]
 
+[tool.hatch.build.targets.sdist]
+include = ["src/tennisvision"]
+
 [tool.ruff]
-line-length = 100
+line-length = 120
 target-version = "py311"
+extend-exclude = [
+  ".venv",
+  "artifacts",
+  "data",
+  "notebooks",
+  "*.ipynb",
+]
+
+[tool.ruff.lint]
+select = ["E", "F", "B", "I", "UP"]
+
+[tool.ruff.format]
+exclude = ["*.ipynb"]
 
 [tool.mypy]
 python_version = "3.11"
@@ -51,3 +72,8 @@ ignore_missing_imports = true
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
+
+
+[project.scripts]
+tennisvision-run = "tennisvision.scripts.run_experiment:main"
+
