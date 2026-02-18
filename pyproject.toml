@@ -1,6 +1,6 @@
 [build-system]
-requires = ["hatchling>=1.22"]
-build-backend = "hatchling.build"
+requires = ["setuptools>=65", "wheel"]
+build-backend = "setuptools.build_meta"
 
 [project]
 name = "tennisvision"
@@ -25,30 +25,29 @@ dependencies = [
   "ruff",
   "albumentations>=2.0.8",
   "mlflow>=3.9.0",
-  "logging>=0.4.9.6",
+  "optuna>=4.7.0",
 ]
 
-[dependency-groups]
+[project.optional-dependencies]
 dev = [
   "pytest>=8",
   "ruff>=0.6",
   "mypy>=1.8",
   "pre-commit>=3.6",
-  "mlflow>=3.9.0",
-]
-video = [
-  "opencv-python>=4.9",
-  "pandas>=2.2",
 ]
 
-[tool.hatch.build.targets.wheel]
-packages = ["src/tennisvision"]
+[project.scripts]
+tennisvision-run = "tennisvision.scripts.run_experiment:main"
+tennisvision-tune_hpo = "tennisvision.scripts.tune_hpo:main"
 
-[tool.hatch.build.targets.sdist]
-include = ["src/tennisvision"]
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
 
 [tool.ruff]
-line-length = 120
+line-length = 150
 target-version = "py311"
 extend-exclude = [
   ".venv",
@@ -72,8 +71,3 @@ ignore_missing_imports = true
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
-
-
-[project.scripts]
-tennisvision-run = "tennisvision.scripts.run_experiment:main"
-

@@ -20,3 +20,5 @@ checkpoints/
 artifacts/
 mlruns/
 *.db
+
+*.egg-info/
