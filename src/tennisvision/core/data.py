@@ -88,7 +88,7 @@ def build_transforms(
         train_tfms = T.Compose(
             [
                 T.RandomResizedCrop(img_size, scale=(0.8, 1.0)),
-                T.RandomHorizontalFlip(p=0.5),
+                T.RandomHorizontalFlip(p=0.3),
                 T.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2),
                 T.ToTensor(),
                 T.Normalize(mean=mean, std=std),
@@ -105,7 +105,7 @@ def build_loaders(
     val_tmfs,
     batch_size: int = 32,
     num_workers: int = 0,
-    pin_memory: bool = False,
+    pin_memory: bool = True,
 ):
     """
     Creates 3 ImageFolder with different transforms, but same idx_* (Subset).

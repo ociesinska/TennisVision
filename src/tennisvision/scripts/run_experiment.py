@@ -11,7 +11,7 @@ def main():
     setup_logging(logging.INFO)
     logger.info("Start training")
 
-    cfg = ExperimentConfig(image_root="data/Tennis positions/images", model_name="resnet18", finetune=False)
+    cfg = ExperimentConfig(image_root="data/Tennis positions/images", model_name="mobilenet_v3_large")
 
     print(run_experiment(cfg))
 
