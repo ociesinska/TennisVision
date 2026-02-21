@@ -34,9 +34,7 @@ def make_split(image_root: str | Path, seed: int = 42, test_size: float = 0.1, v
     val_from_train = val_size / (1 - test_size)
     targets_train = targets[idx_train]
 
-    idx_train, idx_val = train_test_split(
-        idx_train, test_size=val_from_train, random_state=seed, stratify=targets_train
-    )
+    idx_train, idx_val = train_test_split(idx_train, test_size=val_from_train, random_state=seed, stratify=targets_train)
 
     return Split(
         idx_train=idx_train.tolist(),
@@ -119,14 +117,8 @@ def build_loaders(
     val_ds = Subset(ds_val_all, split.idx_val)
     test_ds = Subset(ds_test_all, split.idx_test)
 
-    train_loader = DataLoader(
-        train_ds, batch_size=batch_size, shuffle=True, num_workers=num_workers, pin_memory=pin_memory
-    )
-    val_loader = DataLoader(
-        val_ds, batch_size=batch_size, shuffle=False, num_workers=num_workers, pin_memory=pin_memory
-    )
-    test_loader = DataLoader(
-        test_ds, batch_size=batch_size, shuffle=False, num_workers=num_workers, pin_memory=pin_memory
-    )
+    train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True, num_workers=num_workers, pin_memory=pin_memory)
+    val_loader = DataLoader(val_ds, batch_size=batch_size, shuffle=False, num_workers=num_workers, pin_memory=pin_memory)
+    test_loader = DataLoader(test_ds, batch_size=batch_size, shuffle=False, num_workers=num_workers, pin_memory=pin_memory)
 
     return (train_loader, val_loader, test_loader), (train_ds, val_ds, test_ds), ds_train_all.classes
