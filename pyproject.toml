@@ -39,6 +39,7 @@ dev = [
 [project.scripts]
 tennisvision-run = "tennisvision.scripts.run_experiment:main"
 tennisvision-tune_hpo = "tennisvision.scripts.tune_hpo:main"
+tennisvision-infer = "tennisvision.scripts.infer:main"
 
 [tool.setuptools]
 package-dir = {"" = "src"}

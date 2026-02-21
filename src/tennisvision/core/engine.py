@@ -4,13 +4,12 @@ from pathlib import Path
 
 import matplotlib.pyplot as plt
 import mlflow
+import numpy as np
 import torch
 import torch.nn as nn
-from sklearn.metrics import ConfusionMatrixDisplay, confusion_matrix
+from sklearn.metrics import ConfusionMatrixDisplay, classification_report, confusion_matrix
 from torch.optim.lr_scheduler import LRScheduler, ReduceLROnPlateau
 from torch.utils.data import DataLoader
-
-from tennisvision.core.utils import get_device
 
 logger = logging.getLogger()
 
@@ -43,15 +42,31 @@ class AccuracyMeter:
         return torch.tensor(self.correct) / torch.tensor(self.total)
 
 
-def train_one_epoch(model, 
-                    optimizer, 
-                    loss_fn, 
-                    metric, 
-                    loader: DataLoader, 
-                    device: str,
-                    scheduler: LRScheduler | None,
-                    scheduler_step_per_batch: bool = False
-                    ) -> tuple[float, float]:
+class EarlyStopping:
+    def __init__(self, patience=5, delta=0, verbose=False):
+        self.patience = patience
+        self.delta = delta
+        self.verbose = verbose
+
+        self.best_val_loss = None
+        self.no_improvement_count = 0
+        self.stop_training = False
+
+    def check_early_stop(self, val_loss):
+        if self.best_val_loss is None or val_loss < self.best_val_loss:
+            self.best_val_loss = val_loss
+            self.no_improvement_count = 0
+        else:
+            self.no_improvement_count += 1
+            if self.no_improvement_count >= self.patience:
+                self.stop_training = True
+                if self.verbose:
+                    print("Stopping early as no improvement has been observed for {self.patience} epochs.")
+
+
+def train_one_epoch(
+    model, optimizer, loss_fn, metric, loader: DataLoader, device: str, scheduler: LRScheduler | None, scheduler_step_per_batch: bool = False
+) -> tuple[float, float]:
 
     model.train()
     metric.reset()
@@ -66,7 +81,7 @@ def train_one_epoch(model,
         loss.backward()
         optimizer.step()
 
-        if scheduler is not None and scheduler_step_per_batch: # e.g. OneCycleLR / ExponentialLR (?): scheduler.step() after each optimizer.step()
+        if scheduler is not None and scheduler_step_per_batch:  # e.g. OneCycleLR / ExponentialLR (?): scheduler.step() after each optimizer.step()
             scheduler.step()
 
         total_loss += loss.item()
@@ -115,7 +130,7 @@ def fit(
     ckpt_path: str | Path | None = None,
     *,
     scheduler: LRScheduler | None = None,
-    scheduler_step_per_batch: bool = False
+    scheduler_step_per_batch: bool = False,
 ) -> History:
 
     if metric is None:
@@ -125,14 +140,16 @@ def fit(
     best_epoch = -1
 
     hist = History()
+    early_stopping = EarlyStopping()
 
     ckpt_path = Path(ckpt_path) if ckpt_path is not None else None
     if ckpt_path is not None:
         ckpt_path.parent.mkdir(parents=True, exist_ok=True)
 
     for epoch in range(1, n_epochs + 1):
-        tr_loss, tr_metric = train_one_epoch(model, optimizer, loss_fn, metric, train_loader, device, scheduler=scheduler,
-            scheduler_step_per_batch=scheduler_step_per_batch)
+        tr_loss, tr_metric = train_one_epoch(
+            model, optimizer, loss_fn, metric, train_loader, device, scheduler=scheduler, scheduler_step_per_batch=scheduler_step_per_batch
+        )
         val_loss, val_metric = evaluate(model, val_loader, loss_fn, metric, device)
 
         hist.train_loss.append(tr_loss)
@@ -165,6 +182,12 @@ def fit(
                     },
                     ckpt_path,
                 )
+
+        early_stopping.check_early_stop(val_loss)
+        if early_stopping.stop_training:
+            logger.info(f"Early stopping at epoch {epoch}")
+            break
+
         logger.info(
             f"Epoch {epoch}/{n_epochs} | "
             f"lr {hist.lr[-1]:.3e}"
@@ -177,68 +200,103 @@ def fit(
 
 @dataclass
 class Predictions:
-    y_true: torch.Tensor | None 
+    y_true: torch.Tensor | None
     y_pred: torch.Tensor
-    logits: torch.Tensor
-    probs: torch.Tensor
+    logits: torch.Tensor | None = None
+    probs: torch.Tensor | None = None
 
 
-@torch.no_grad()
+@torch.inference_mode()
 def predict_loader(
-    model: torch.nn.Module,
-    loader: torch.utils.data.DataLoader) -> Predictions:
-    
-    model.eval()
-    device = get_device()
+    model: torch.nn.Module, loader: torch.utils.data.DataLoader, device: torch.device, *, return_logits: bool = True, return_probs: bool = True
+) -> Predictions:
 
-    all_logits = []
-    all_y = []
+    model.eval()
+    model.to(device)
+
+    y_true_chunks = []
+    y_pred_chunks = []
+    logits_chunks = [] if return_logits else None
+    probs_chunks = [] if return_probs else None
 
     for batch in loader:
         if isinstance(batch, (tuple, list)) and len(batch) == 2:
             xb, yb = batch
-            all_y.append(yb.cpu())
+            y_true_chunks.append(yb.cpu())
         else:
             xb = batch
-        
-        xb = xb.to(device)
+
+        xb = xb.to(device, non_blocking=True)
         logits = model(xb)
-        all_logits.append(logits.cpu())
-    
-    logits = torch.cat(all_logits, dim=0)
-    probs = torch.softmax(logits, dim=1)
-    y_pred = probs.argmax(dim=1)
+        preds = logits.argmax(dim=1).detach().cpu()
+        y_pred_chunks.append(preds)
 
-    y_true = torch.cat(all_y, dim=0) if all_y else None
+        if return_logits:
+            logits_chunks.append(logits.detach().cpu())
 
-    return Predictions(y_true=y_true, y_pred=y_pred, probs=probs, logits=logits)
+        if return_probs:
+            probs = torch.softmax(logits, dim=1).detach().cpu()
+            probs_chunks.append(probs)
+
+    y_true = torch.cat(y_true_chunks, dim=0) if y_true_chunks else None
+    y_pred = torch.cat(y_pred_chunks, dim=0)
+
+    out_logits = torch.cat(logits_chunks, dim=0) if return_logits else None
+    out_probs = torch.cat(probs_chunks, dim=0) if return_probs else None
+
+    return Predictions(y_true=y_true, y_pred=y_pred, logits=out_logits, probs=out_probs)
 
 
-def predict_tensor(model, x: torch.Tensor):
+@torch.inference_mode()
+def predict_tensor(model: torch.nn.Module, x: torch.Tensor, *, device: torch.device):
     """Predict a single tensor."""
     model.eval()
+    model.to(device)
+    x = x.to(device)
     logits = model(x)
-    probs=torch.softmax(logits, dim=1)
+    probs = torch.softmax(logits, dim=1)
     pred = probs.argmax(dim=1)
     return pred.cpu(), probs.cpu()
 
 
-def evaluate_and_log_split(
-        model: torch.nn.Module, 
-        loader: torch.utils.data.DataLoader,
-        split_name: str,
-        class_names: list[str]) -> None:
-    
-    preds = predict_loader(model, loader)
-    y_true = preds.y_true.numpy()
-    y_pred = preds.y_pred.numpy()
+def evaluate_split(predictions: Predictions, class_names: list[str]) -> None:
 
+    y_true = predictions.y_true.numpy()
+    y_pred = predictions.y_pred.numpy()
     acc = (y_true == y_pred).mean()
-    mlflow.log_metric(f"{split_name} / acc", float(acc))
-
     cm = confusion_matrix(y_true, y_pred)
-    fig, ax = plt.subplots(figsize=(6,6))
+    report = classification_report(y_true, y_pred, target_names=class_names, output_dict=True)
+
+    # Accuracy per class: diagonal / row sum (true positives / all true samples for that class)
+    acc_per_class = {}
+    for i, class_name in enumerate(class_names):
+        class_total = cm[i, :].sum()
+        if class_total > 0:
+            acc_per_class[class_name] = cm[i, i] / class_total
+        else:
+            acc_per_class[class_name] = 0.0
+
+    return {"acc": acc, "cm": cm, "report": report, "acc_per_class": acc_per_class}
+
+
+def plot_confusion_matrix(cm: np.ndarray, class_names: list[str]):
+
+    fig, ax = plt.subplots(figsize=(6, 6))
     ConfusionMatrixDisplay(cm, display_labels=class_names).plot(ax=ax, xticks_rotation=45, colorbar=False)
     plt.tight_layout()
-    mlflow.log_figure(fig, f"{split_name}/confusion_matrix.png")
-    plt.close(fig)
+
+    return fig
+
+
+def log_eval_to_mlflow(metrics: dict, fig, split_name: str) -> None:
+
+    mlflow.log_metric(f"{split_name} / acc ", metrics["acc"])
+    mlflow.log_figure(fig, f"{split_name} / confusion_matrix.png")
+
+    # F1 for each class
+    for cls in [k for k in metrics["report"].keys() if k not in ("accuracy", "macro avg", "weighted avg")]:
+        mlflow.log_metric(f"{split_name}/f1/{cls}", float(metrics["report"][cls]["f1-score"]))
+
+    # Accuracy per class
+    for cls, acc_value in metrics["acc_per_class"].items():
+        mlflow.log_metric(f"{split_name}/acc/{cls}", float(acc_value))

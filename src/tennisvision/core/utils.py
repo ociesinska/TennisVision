@@ -38,6 +38,4 @@ def ensure_dir(path: str | Path) -> Path:
 
 
 def setup_logging(level: int = logging.INFO) -> None:
-    logging.basicConfig(
-        level=level, format="%(asctime)s | %(levelname)s | %(name)s | %(message)s", datefmt="%H:%M:%S", force=True
-    )
+    logging.basicConfig(level=level, format="%(asctime)s | %(levelname)s | %(name)s | %(message)s", datefmt="%H:%M:%S", force=True)

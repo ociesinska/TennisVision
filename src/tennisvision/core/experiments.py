@@ -13,7 +13,7 @@ from mlflow.models import infer_signature
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 from tennisvision.core.data import build_loaders, build_transforms, make_split
-from tennisvision.core.engine import evaluate_and_log_split, fit, make_optimizer
+from tennisvision.core.engine import fit, make_optimizer
 from tennisvision.core.mlflow_utils import setup_mlflow
 from tennisvision.core.models import (
     build_model,
@@ -24,6 +24,7 @@ from tennisvision.core.models import (
 from tennisvision.core.utils import ensure_dir, get_device, now_tag, seed_everything
 
 logger = logging.getLogger()
+
 
 @dataclass(frozen=True)
 class ExperimentConfig:
@@ -56,7 +57,7 @@ class ExperimentConfig:
 
     weight_decay: float = 0.0
     label_smoothing: float = 0.0
-    
+
     run_name: str | None = None
 
     mlflow_experiment_name: str = "TennisVision"
@@ -95,22 +96,17 @@ def log_history(history: Any, prefix: str = "") -> None:
                 key = f"{prefix}{k}" if prefix else k
                 mlflow.log_metric(key, float(v[epoch]), step=epoch + 1)  # :contentReference[oaicite:7]{index=7}
 
+
 def run_experiment(
-        cfg: ExperimentConfig,
-        *,
-        log_model: bool = True,
-        log_confusion_matrix: bool = True,
-        save_checkpoints: bool = True
-        ) -> dict[str, Any]:
-    
+    cfg: ExperimentConfig, *, log_model: bool = True, log_confusion_matrix: bool = True, save_checkpoints: bool = True
+) -> dict[str, Any]:
+
     seed_everything(cfg.seed)
     device = get_device()
 
     has_active_run = mlflow.active_run() is not None
 
-    setup_mlflow(experiment_name=cfg.mlflow_experiment_name,
-                 tracking_uri=cfg.mlflow_tracking_uri,
-                 set_experiment= not has_active_run)
+    setup_mlflow(experiment_name=cfg.mlflow_experiment_name, tracking_uri=cfg.mlflow_tracking_uri, set_experiment=not has_active_run)
 
     # local folder for this path's checkpoints
 
@@ -126,6 +122,10 @@ def run_experiment(
     logger.info(f"Fitting pretrained model {cfg.model_name}")
     # split
     split = make_split(cfg.image_root, seed=cfg.seed, test_size=cfg.test_size, val_size=cfg.val_size)
+
+    split_dict = {"idx_train": split.idx_train, "idx_val": split.idx_val, "idx_test": split.idx_test, "seed": split.seed}
+
+    mlflow.log_dict(_jsonable(split_dict), "split/indices.json")
 
     # model & weights
     num_classes = len(split.class_to_idx)
@@ -150,10 +150,10 @@ def run_experiment(
 
     run_name = cfg.run_name or f"{cfg.model_name}_seed{cfg.seed}"
 
-    
     with mlflow.start_run(run_name=run_name, nested=has_active_run) as run:
         mlflow.log_dict(_jsonable(asdict(cfg)), "config.json")
         mlflow.log_dict(idx_to_class, "labels/idx_to_class.json")
+        mlflow.log_dict(_jsonable(split_dict), "split/indices.json")
 
         # head-only
         freeze_backbone(model)
@@ -162,15 +162,15 @@ def run_experiment(
         scheduler_head = None
 
         loss_fn = nn.CrossEntropyLoss(label_smoothing=cfg.label_smoothing)
-        optimizer = make_optimizer(model, lr=cfg.head_lr, wd = cfg.weight_decay)
+        optimizer = make_optimizer(model, lr=cfg.head_lr, wd=cfg.weight_decay)
         logger.info("Fitting head of the pretrained model.")
-        
+
         if cfg.use_scheduler:
             scheduler_head = ReduceLROnPlateau(
                 optimizer,
                 mode="max",
-                factor = cfg.head_scheduler_factor,
-                patience = cfg.head_scheduler_patience,
+                factor=cfg.head_scheduler_factor,
+                patience=cfg.head_scheduler_patience,
             )
 
         hist_head = fit(
@@ -183,7 +183,7 @@ def run_experiment(
             n_epochs=cfg.head_epochs,
             ckpt_path=head_ckpt_path,
             scheduler=scheduler_head,
-            scheduler_step_per_batch=False
+            scheduler_step_per_batch=False,
         )
 
         log_history(hist_head, prefix="head/")
@@ -200,15 +200,15 @@ def run_experiment(
             # for others: TODO later
             unfreeze_resnet_layer4(model)
             optimizer = make_optimizer(model, lr=cfg.finetune_lr, wd=cfg.weight_decay)
-            
+
             scheduler_ft = None
             if cfg.use_scheduler:
                 scheduler_ft = ReduceLROnPlateau(
                     optimizer,
-                    mode="max", # max accuracy
+                    mode="max",  # max accuracy
                     factor=cfg.ft_scheduler_factor,
                     patience=cfg.ft_scheduler_patience,
-                    min_lr=1e-6
+                    min_lr=1e-6,
                 )
 
             hist_ft = fit(
@@ -221,7 +221,7 @@ def run_experiment(
                 n_epochs=cfg.finetune_epochs,
                 ckpt_path=ft_ckpt_path,
                 scheduler=scheduler_ft,
-                scheduler_step_per_batch=False
+                scheduler_step_per_batch=False,
             )
 
             log_history(hist_ft, prefix="ft/")
@@ -249,11 +249,6 @@ def run_experiment(
             ckpt = torch.load(best_path, map_location=device)
             model.load_state_dict(ckpt["model_state"])
 
-
-        # inference and evaluation on validation set
-        if log_confusion_matrix:
-            evaluate_and_log_split(model, val_loader, "val", class_names=classes)
-
         # Model log (signature + input_example), already on best weights
         sample_x, _ = next(iter(val_loader))
         sample_x = sample_x[:1].to(device)
@@ -276,30 +271,3 @@ def run_experiment(
             "ft_best_val_metric": getattr(hist_ft, "best_val_metric", None) if hist_ft else None,
             "best_checkpoint": best_path.name if best_path and best_path.exists() else None,
         }
-
-def load_mlflow_model_from_run(
-        model,
-        run_id: str,
-        # tracking_uri: str = "http://127.0.0.1:8080",
-        model_artifact_path: str = "model"
-) -> torch.nn.Module:
-    """Load model from Mlflow for run_id."""
-    setup_mlflow()
-    device = get_device()
-    model_uri = f"runs:/{run_id}/{model_artifact_path}"
-    model = model.pytorch.load_model(model_uri)
-    model.to(device)
-    return model.to(device)
-
-
-def load_mlflow_model_from_registry(
-        model_uri: str,
-        # tracking_uri: str,
-):
-    """Load Mlflow model from registry"""
-    setup_mlflow()
-    model = mlflow.pytorch.load_model(model_uri)
-    device = get_device()
-    model.to(device)
-
-    return model
