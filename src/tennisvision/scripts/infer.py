@@ -1,14 +1,13 @@
-# TODO: load model form MLFlow and run inference
 import json
 import logging
 from datetime import datetime
 
 import mlflow
-import torch
 from mlflow.tracking import MlflowClient
 
 from tennisvision.core.data import Split, build_loaders, build_transforms
-from tennisvision.core.engine import evaluate_split, log_eval_to_mlflow, plot_confusion_matrix, predict_loader
+from tennisvision.core.engine import evaluate_split, log_eval_to_mlflow, plot_confusion_matrix, plot_random_misclassified_cases, predict_loader
+from tennisvision.core.experiments import ExperimentConfig
 from tennisvision.core.mlflow_utils import load_model_from_mlflow, setup_mlflow
 from tennisvision.core.utils import setup_logging
 
@@ -20,18 +19,19 @@ IMAGENET_STD = (0.229, 0.224, 0.225)
 
 def main() -> None:
 
+    cfg = ExperimentConfig()
     setup_logging(logging.INFO)
     logger.info("Inference started.")
 
-    tracking_uri = "http://127.0.0.1:8080"
+    tracking_uri = cfg.mlflow_tracking_uri
     experiment_name = "TennisVisionInference"
     setup_mlflow(experiment_name=experiment_name, tracking_uri=tracking_uri, set_experiment=True)
-    device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
-    source_run_id = "454d5b0cb9d0429a8231ff4a522db6e4"
+    device = cfg.device
+    source_run_id = "ed1ca9c3b0a4430581e0aeb039834fac"
     client = MlflowClient(tracking_uri=tracking_uri)
-    image_root = "data/Tennis positions/images"
-
+    image_root = cfg.image_root
     split_path = client.download_artifacts(source_run_id, "split/indices.json")
+
     with open(split_path) as f:
         split_dict = json.load(f)
 
@@ -63,9 +63,9 @@ def main() -> None:
         split=split,
         train_tfms=val_tfms,  # Use val transforms for all
         val_tmfs=val_tfms,
-        batch_size=32,
-        num_workers=0,
-        pin_memory=True,
+        batch_size=cfg.batch_size,
+        num_workers=cfg.num_workers,
+        pin_memory=cfg.pin_memory,
     )
 
     run_name = f"infer_{source_run_id[:8]}_{datetime.now():%Y%m%d_%H%M%S}"
@@ -80,10 +80,12 @@ def main() -> None:
 
         # Evaluate and log results
         metrics = evaluate_split(predictions, classes)
-        fig = plot_confusion_matrix(metrics["cm"], classes)
+        cm = plot_confusion_matrix(metrics["cm"], classes)
+        misclassified_plots = plot_random_misclassified_cases(predictions, test_loader, classes)
         logger.info(f"Metrics: {metrics}")
 
-        log_eval_to_mlflow(metrics, fig, split_name="test")
+        log_eval_to_mlflow(metrics, cm, split_name="test")
+        mlflow.log_figure(misclassified_plots, "misclassified samples/misclassified_samples.png")
         logger.info(f"Evaluation completed. test/acc={metrics['acc']:.4f}")
 
 

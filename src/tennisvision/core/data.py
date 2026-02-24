@@ -103,7 +103,7 @@ def build_loaders(
     val_tmfs,
     batch_size: int = 32,
     num_workers: int = 0,
-    pin_memory: bool = True,
+    pin_memory: bool = False,  # not available on mps now
 ):
     """
     Creates 3 ImageFolder with different transforms, but same idx_* (Subset).

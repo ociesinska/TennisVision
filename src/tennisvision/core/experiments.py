@@ -28,14 +28,14 @@ logger = logging.getLogger()
 
 @dataclass(frozen=True)
 class ExperimentConfig:
-    image_root: str
-    model_name: str
+    image_root: str = "data/Tennis positions/images"
+    model_name: str = "model"
     seed: int = 42
 
     # data
     batch_size: int = 32
-    num_workers: int = 2
-    pin_memory: bool = True
+    num_workers: int = 0
+    pin_memory: bool = False
 
     # training
     head_epochs: int = 5
@@ -65,6 +65,7 @@ class ExperimentConfig:
 
     artifacts_dir: Path = Path("artifacts")
     mlflow_dir: Path = Path("artifacts/mlflow")
+    device = "mps"
 
 
 def _jsonable(d: dict[str, Any]) -> dict[str, Any]:

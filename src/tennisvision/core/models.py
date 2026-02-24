@@ -31,27 +31,6 @@ def unfreeze_resnet_layer4(model) -> None:
             p.requires_grad = True
 
 
-def build_efficientnet_b0(num_classes, pretrained=True):
-    weights = EfficientNet_B0_Weights.DEFAULT if pretrained else None
-    model = efficientnet_b0(weights=weights)
-    model.classifier[-1] = nn.Linear(model.classifier[-1].in_features, num_classes)
-    return model, weights
-
-
-def build_mobilenet_v3_large(num_classes, pretrained=True):
-    weights = MobileNet_V3_Large_Weights.DEFAULT if pretrained else None
-    model = mobilenet_v3_large(weights=weights)
-    model.classifier[-1] = nn.Linear(model.classifier[-1].in_features, num_classes)
-    return model, weights
-
-
-def build_convnext_tiny(num_classes, pretrained=True):
-    weights = ConvNeXt_Tiny_Weights.DEFAULT if pretrained else None
-    model = convnext_tiny(weights=weights)
-    model.classifier[-1] = nn.Linear(model.classifier[-1].in_features, num_classes)
-    return model, weights
-
-
 def build_model(model_name: str, num_classes: int, pretrained: bool = True):
     name = model_name.lower()
 
@@ -84,5 +63,7 @@ def build_model(model_name: str, num_classes: int, pretrained: bool = True):
         model = convnext_tiny(weights=weights)
         model.classifier[-1] = nn.Linear(model.classifier[-1].in_features, num_classes)
         return model, weights
+
+    # TODO: model - touch / no touch -> ? how to build this
 
     raise ValueError(f"Unknown model_name: {model_name}")
