@@ -288,10 +288,109 @@ def plot_confusion_matrix(cm: np.ndarray, class_names: list[str]):
     return fig
 
 
+def plot_random_misclassified_cases(
+    predictions: Predictions,
+    data_loader: DataLoader,
+    class_names: list[str],
+    n_samples: int = 5,
+    mean: list[float] | None = None,
+    std: list[float] | None = None,
+):
+    """
+    Plots random misclassified examples.
+
+    Args:
+        predictions: The Predictions object returned by predict_loader.
+        data_loader: The data loader used to generate predictions.
+                     CRITICAL: Must be the SAME loader (or one with shuffle=False and same order).
+                     If the loader was shuffled during prediction, indices cannot be mapped back to the dataset easily.
+        class_names: List of class names.
+        n_samples: Number of samples to plot.
+        mean: Normalization mean (for denormalization).
+        std: Normalization std (for denormalization).
+    """
+    if std is None:
+        std = [0.229, 0.224, 0.225]
+    if mean is None:
+        mean = [0.485, 0.456, 0.406]
+
+    y_true = predictions.y_true
+    y_pred = predictions.y_pred
+
+    # ensure tensors are on CPU
+    if isinstance(y_true, torch.Tensor):
+        y_true = y_true.cpu()
+    if isinstance(y_pred, torch.Tensor):
+        y_pred = y_pred.cpu()
+
+    if y_true is None:
+        logger.warning("y_true is None in predictions, cannot compute misclassified cases.")
+        return plt.figure()
+
+    misclassified_mask = y_true != y_pred
+    misclassified_idx = torch.where(misclassified_mask)[0]
+
+    if len(misclassified_idx) == 0:
+        logger.info("No misclassified cases found!")
+        return plt.figure()
+
+    # select random samples:
+    n_plot = min(n_samples, len(misclassified_idx))
+    random_idx = torch.randperm(len(misclassified_idx))
+    selected_idx = misclassified_idx[random_idx]
+
+    # Prepare figure
+    cols = 3
+    rows = (n_plot + cols - 1) // cols
+    fig, axes = plt.subplots(rows, cols, figsize=(4 * cols, 4 * rows))
+
+    if n_plot == 1:
+        axes = np.array([axes])
+    axes = axes.flatten()
+
+    dataset = data_loader.dataset
+
+    for ax, idx in zip(axes, selected_idx, strict=True):
+        idx = idx.item()
+
+        # Access image and label from dataset
+        # Note: This assumes the dataset is indexable and the predicted order matches dataset order
+        img, label = dataset[idx]
+
+        # Denormalize image for plotting if it's a tensor
+        if isinstance(img, torch.Tensor):
+            img = img.permute(1, 2, 0).numpy()
+            img = (img * std) + mean
+            img = np.clip(img, 0, 1)
+
+        true_label_idx = y_true[idx].item()
+        pred_label_idx = y_pred[idx].item()
+
+        true_name = class_names[true_label_idx] if true_label_idx < len(class_names) else str(true_label_idx)
+        pred_name = class_names[pred_label_idx] if pred_label_idx < len(class_names) else str(pred_label_idx)
+
+        # Get probability if available
+        prob_str = ""
+        if predictions.probs is not None:
+            prob = predictions.probs[idx, pred_label_idx].item()
+            prob_str = f"({prob:.2f})"
+
+        ax.imshow(img)
+        ax.set_title(f"True: {true_name}\nPred: {pred_name}{prob_str}", color="red", fontsize=10)
+        ax.axis("off")
+
+    # Turn off remaining empty axes
+    for i in range(n_plot, len(axes)):
+        axes[i].axis("off")
+
+    plt.tight_layout()
+    return fig
+
+
 def log_eval_to_mlflow(metrics: dict, fig, split_name: str) -> None:
 
     mlflow.log_metric(f"{split_name} / acc ", metrics["acc"])
-    mlflow.log_figure(fig, f"{split_name} / confusion_matrix.png")
+    mlflow.log_figure(fig, f"{split_name}_confusion_matrix / confusion_matrix.png")
 
     # F1 for each class
     for cls in [k for k in metrics["report"].keys() if k not in ("accuracy", "macro avg", "weighted avg")]:

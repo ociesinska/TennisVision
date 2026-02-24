@@ -12,6 +12,7 @@ from tennisvision.core.utils import setup_logging
 
 
 def objective(trial: optuna.Trial, base_cfg: ExperimentConfig) -> float:
+    logger.info(f"=== Starting Trial {trial.number} ===")
 
     # sample hyperparams
     weight_decay = trial.suggest_float("weight_decay", 1e-8, 1e-3, log=True)
@@ -39,7 +40,7 @@ def objective(trial: optuna.Trial, base_cfg: ExperimentConfig) -> float:
             head_scheduler_factor=head_factor,
             ft_scheduler_patience=ft_patience,
             ft_scheduler_factor=ft_factor,
-            seed=base_cfg.seed + trial.number,
+            seed=base_cfg.seed,
         )
     else:
         # Optimize learning rates
@@ -52,7 +53,7 @@ def objective(trial: optuna.Trial, base_cfg: ExperimentConfig) -> float:
             finetune_lr=finetune_lr,
             weight_decay=weight_decay,
             label_smoothing=label_smoothing,
-            seed=base_cfg.seed + trial.number,
+            seed=base_cfg.seed,
         )
 
     run_name = f"hpo_trial_{trial.number}"
@@ -67,27 +68,28 @@ def objective(trial: optuna.Trial, base_cfg: ExperimentConfig) -> float:
     best = out.get("ft_best_val_metric") or out.get("head_best_val_metric") or -1.0
     mlflow.log_metric("hpo/objective", float(best))
 
+    logger.info(f"=== Finished Trial {trial.number} | Score: {best:.4f} ===")
     return float(best)
 
 
 logger = logging.getLogger(__name__)
 
 
-def main(trials=30) -> None:
+def main(trials=15) -> None:
 
     setup_logging(logging.INFO)
     logger.info("Start training")
 
     base_cfg = ExperimentConfig(
         image_root="data/Tennis positions/images",
-        model_name="resnet18",
+        model_name="convnext_tiny",
         head_epochs=4,
-        finetune=True,
+        finetune=False,
         finetune_epochs=8,
         batch_size=32,
-        num_workers=2,
+        num_workers=0,  # on macOS multiprocessing with DataLoader in a loop (like HPO) often hangs.
         pin_memory=True,
-        mlflow_experiment_name="TennisVisionHPO",
+        mlflow_experiment_name="TennisVision",
     )
 
     study = optuna.create_study(direction="maximize")
@@ -114,7 +116,7 @@ def main(trials=30) -> None:
             **study.best_params,  # head_lr, finetune_lr, weight_decay, label_smoothing
             head_epochs=base_cfg.head_epochs,
             finetune_epochs=base_cfg.finetune_epochs,
-            seed=42,
+            seed=base_cfg.seed,
         )
 
         # final run
