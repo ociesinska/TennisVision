@@ -36,6 +36,7 @@ def main() -> None:
         split_dict = json.load(f)
 
     idx_to_class_path = client.download_artifacts(source_run_id, "labels/idx_to_class.json")
+
     with open(idx_to_class_path) as x:
         idx_to_class = json.load(x)
 
