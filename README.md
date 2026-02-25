@@ -112,7 +112,3 @@ TennisVision/
 ├── pyproject.toml
 └── Makefile
 ```
-
-- Task-specific scripts should be placed inside each task folder (e.g., `src/tennisvision/tasks/shot_classification/scripts/`).
-- General scripts used by all tasks should remain in `src/tennisvision/scripts/`.
-- This structure makes the project modular and easy to expand for new tasks.
