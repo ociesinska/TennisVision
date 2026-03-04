@@ -27,7 +27,7 @@ def main() -> None:
     experiment_name = "TennisVisionInference"
     setup_mlflow(experiment_name=experiment_name, tracking_uri=tracking_uri, set_experiment=True)
     device = cfg.device
-    source_run_id = "ed1ca9c3b0a4430581e0aeb039834fac"
+    source_run_id = "46341c0595044296a168b78116e360f3"
     client = MlflowClient(tracking_uri=tracking_uri)
     image_root = cfg.image_root
     split_path = client.download_artifacts(source_run_id, "split/indices.json")

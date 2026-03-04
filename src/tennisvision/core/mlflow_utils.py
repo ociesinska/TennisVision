@@ -75,7 +75,7 @@ def load_model_from_mlflow(
     tracking_uri: str | None = None,
     eval_mode: bool = True,
     device: torch.device,
-) -> torch.nn.Module:
+) -> tuple[torch.nn.Module, str]:
     """
     Load a PyTorch model logged in MLflow.
 

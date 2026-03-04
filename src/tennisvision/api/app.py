@@ -5,24 +5,21 @@ import logging
 import os
 import time
 from contextlib import asynccontextmanager
-from typing import Annotated
 
 import torch
 from fastapi import FastAPI, File, HTTPException, Request, UploadFile
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from PIL import Image
 from pydantic import BaseModel
-from torchvision import transforms as T
 
+from tennisvision.core.data import build_preprocess
+from tennisvision.core.explainability import gradcam_heatmap, overlay_heatmap, preprocess_PIL
 from tennisvision.core.mlflow_utils import load_model_from_mlflow, setup_mlflow
+from tennisvision.core.utils import rgb_ndarray_to_png_bytes
 
 logger = logging.getLogger()
 
-IMAGENET_MEAN = (0.485, 0.456, 0.406)
-IMAGENET_STD = (0.229, 0.224, 0.225)
-
-PREPROCESS = T.Compose([T.Resize((224, 224)), T.ToTensor(), T.Normalize(IMAGENET_MEAN, IMAGENET_STD)])
-
+PREPROCESS = build_preprocess()
 
 class PredictResponse(BaseModel):
     label: str
@@ -49,7 +46,6 @@ class BatchPredictResponse(BaseModel):
     device: str
     latency_ms: float
     results: list[BatchItem]
-
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -117,14 +113,11 @@ def _predict_pil(request: Request, img: Image.Image, top_k: int = 3) -> tuple[in
 
 
 @app.post("/predict", response_model=PredictResponse)
-async def predict(request: Request, file: Annotated[UploadFile | None, File()] = None, top_k: int = 3):
+async def predict(request: Request, file: UploadFile = File(...), top_k: int = 3):
     try:
         model = request.app.state.model
         idx_to_class = request.app.state.idx_to_class
         model_uri = request.app.state.model_uri
-
-        if file is None:
-            file = File(...)
 
         if model is None:
             raise HTTPException(status_code=503, detail="Model not loaded yet.")
@@ -187,7 +180,7 @@ def _predict_batch_pil(request: Request, images: list[Image.Image], top_k: int) 
 
 
 @app.post("/predict_batch", response_model=BatchPredictResponse)
-async def predict_batch(request: Request, files: list[Annotated[UploadFile | None, File()]] = None, top_k: int = 3, strict: bool = False):
+async def predict_batch(request: Request, files: list[UploadFile] = File(...), top_k: int = 3, strict: bool = False):
     """
     strict = False: returns error per file and moves on
     strict = True: wrong file -> error
@@ -255,3 +248,39 @@ async def predict_batch(request: Request, files: list[Annotated[UploadFile | Non
     except Exception as e:
         logger.exception("Predict Batch failed.")
         raise HTTPException(status_code=500, detail=str(e)) from e
+    
+
+@app.post("/explain") #TODO make it predict explain
+async def explain(request: Request, file: UploadFile = File(...), top_pred: int = 2):
+    raw = await file.read()
+
+    if not (file.content_type or "").startswith("image/"):
+        raise HTTPException(status_code=400, detail=f"Unsupported content_type: {file.content_type}")
+
+    image = Image.open(io.BytesIO(raw))
+    model = request.app.state.model
+    device = request.app.state.device
+    request.app.state.idx_to_class = {0: "backhand", 1: "forehand", 2: "ready_position", 3: "serve"}
+    idx_to_class = app.state.idx_to_class # TODO
+
+    x = preprocess_PIL(image, PREPROCESS)
+    x = x.to(device)
+    pred = model(x) # [B, C]
+    top2_idx = pred.topk(k=2, dim=1).indices # [B, 2]
+    pred_idx1 = top2_idx[:, 0].item()
+    pred_idx2 = top2_idx[:, 1].item()
+    pred_class_1 = idx_to_class[pred_idx1]
+    pred_class_2 = idx_to_class[pred_idx2]
+    conv_layer = model.features[-2] #TODO adjust to other model types
+
+    heatmap_pred1 = gradcam_heatmap(model=model, x=x, target=pred_idx1, conv_layer=conv_layer, device=device)
+    heatmap_pred2 = gradcam_heatmap(model=model, x=x, target=pred_idx2, conv_layer=conv_layer, device=device)
+
+    overlay_pred1 = overlay_heatmap(image, heatmap_pred1, alpha=0.4, is_rgb=True)
+    overlay_pred2 = overlay_heatmap(image, heatmap_pred2, alpha=0.4, is_rgb=True)
+
+    png_bytes = rgb_ndarray_to_png_bytes(overlay_pred1)
+
+    return Response(content=png_bytes, media_type="image/png")
+
+    

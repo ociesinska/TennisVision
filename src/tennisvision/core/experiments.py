@@ -67,6 +67,9 @@ class ExperimentConfig:
     mlflow_dir: Path = Path("artifacts/mlflow")
     device = "mps"
 
+    # explainability:
+    enable_explainability: bool = False
+
 
 def _jsonable(d: dict[str, Any]) -> dict[str, Any]:
     """Changes Path/torch.device etc. to serialized values to JSON"""
@@ -174,7 +177,7 @@ def run_experiment(
                 patience=cfg.head_scheduler_patience,
             )
 
-        hist_head = fit(
+        hist_head, explain_images_head = fit(
             model=model,
             train_loader=train_loader,
             val_loader=val_loader,
@@ -185,9 +188,16 @@ def run_experiment(
             ckpt_path=head_ckpt_path,
             scheduler=scheduler_head,
             scheduler_step_per_batch=False,
+            explainability=cfg.enable_explainability
         )
 
         log_history(hist_head, prefix="head/")
+
+        # Log explainability images for head phase
+        if cfg.enable_explainability and explain_images_head:
+            for epoch, (img1, img2) in explain_images_head.items():
+                mlflow.log_image(img1, f"explainability/head/epoch_{epoch}_pred1.png")
+                mlflow.log_image(img2, f"explainability/head/epoch_{epoch}_pred2.png")
 
         if head_ckpt_path and head_ckpt_path.exists():
             mlflow.log_artifact(str(head_ckpt_path), artifact_path="checkpoints")
@@ -212,7 +222,7 @@ def run_experiment(
                     min_lr=1e-6,
                 )
 
-            hist_ft = fit(
+            hist_ft, explain_images_ft = fit(
                 model=model,
                 train_loader=train_loader,
                 val_loader=val_loader,
@@ -223,9 +233,16 @@ def run_experiment(
                 ckpt_path=ft_ckpt_path,
                 scheduler=scheduler_ft,
                 scheduler_step_per_batch=False,
+                explainability=cfg.enable_explainability
             )
 
             log_history(hist_ft, prefix="ft/")
+
+            # Log explainability images for finetune phase
+            if cfg.enable_explainability and explain_images_ft:
+                for epoch, (img1, img2) in explain_images_ft.items():
+                    mlflow.log_image(img1, f"explainability/finetune/epoch_{epoch}_pred1.png")
+                    mlflow.log_image(img2, f"explainability/finetune/epoch_{epoch}_pred2.png")
 
             if ft_ckpt_path and ft_ckpt_path.exists():
                 mlflow.log_artifact(str(ft_ckpt_path), artifact_path="checkpoints")
