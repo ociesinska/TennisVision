@@ -29,6 +29,8 @@ dependencies = [
   "fastapi>=0.128.7",
   "uvicorn>=0.40.0",
   "python-multipart>=0.0.22",
+  "captum>=0.8.0",
+  "opencv-python>=4.11.0.86",
 ]
 
 [project.optional-dependencies]
@@ -43,6 +45,7 @@ dev = [
 tennisvision-run = "tennisvision.tasks.shot_classification.scripts.run_experiment:main"
 tennisvision-tune_hpo = "tennisvision.tasks.shot_classification.scripts.tune_hpo:main"
 tennisvision-infer = "tennisvision.tasks.shot_classification.scripts.infer:main"
+tennisvision-explain = "tennisvision.tasks.shot_classification.scripts.explain:main"
 
 [tool.setuptools]
 package-dir = {"" = "src"}

@@ -75,14 +75,14 @@ def objective(trial: optuna.Trial, base_cfg: ExperimentConfig) -> float:
 logger = logging.getLogger(__name__)
 
 
-def main(trials=15) -> None:
+def main(trials=6) -> None:
 
     setup_logging(logging.INFO)
     logger.info("Start training")
 
     base_cfg = ExperimentConfig(
         image_root="data/Tennis positions/images",
-        model_name="convnext_tiny",
+        model_name="mobilenet_v3_large",
         head_epochs=4,
         finetune=False,
         finetune_epochs=8,
@@ -90,6 +90,7 @@ def main(trials=15) -> None:
         num_workers=0,  # on macOS multiprocessing with DataLoader in a loop (like HPO) often hangs.
         pin_memory=True,
         mlflow_experiment_name="TennisVision",
+        enable_explainability=False 
     )
 
     study = optuna.create_study(direction="maximize")
@@ -110,17 +111,17 @@ def main(trials=15) -> None:
 
         print("BEST:", study.best_value, study.best_params)
 
-        # Final run: full logs + checkpoints
+        # Final run: full logs + checkpoints + explainability turned on
         final_cfg = replace(
             base_cfg,
             **study.best_params,  # head_lr, finetune_lr, weight_decay, label_smoothing
             head_epochs=base_cfg.head_epochs,
             finetune_epochs=base_cfg.finetune_epochs,
             seed=base_cfg.seed,
+            enable_explainability = True
         )
 
-        # final run
-
+        # final run (explainability images are logged to MLflow inside run_experiment)
         run_experiment(final_cfg, log_model=True, log_confusion_matrix=True, save_checkpoints=True)
 
         # getting the last child run (which is our final model)

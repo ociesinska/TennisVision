@@ -11,6 +11,8 @@ from sklearn.metrics import ConfusionMatrixDisplay, classification_report, confu
 from torch.optim.lr_scheduler import LRScheduler, ReduceLROnPlateau
 from torch.utils.data import DataLoader
 
+from tennisvision.core.explainability import explainability_for_training
+
 logger = logging.getLogger()
 
 
@@ -131,6 +133,7 @@ def fit(
     *,
     scheduler: LRScheduler | None = None,
     scheduler_step_per_batch: bool = False,
+    explainability: bool = False
 ) -> History:
 
     if metric is None:
@@ -146,6 +149,8 @@ def fit(
     if ckpt_path is not None:
         ckpt_path.parent.mkdir(parents=True, exist_ok=True)
 
+    explain_images = {}
+
     for epoch in range(1, n_epochs + 1):
         tr_loss, tr_metric = train_one_epoch(
             model, optimizer, loss_fn, metric, train_loader, device, scheduler=scheduler, scheduler_step_per_batch=scheduler_step_per_batch
@@ -158,6 +163,11 @@ def fit(
         hist.val_metric.append(val_metric)
         hist.lr.append(float(optimizer.param_groups[0]["lr"]))
 
+        if explainability:
+            img1, img2 = explainability_for_training(model, epoch, train_loader, device, explain_every=5, explain_sample = 3)
+            if img1 is not None and img2 is not None:
+                explain_images[epoch] = img1, img2
+                
         # lr scheduler per epoch
         if scheduler is not None and not scheduler_step_per_batch:
             if isinstance(scheduler, ReduceLROnPlateau):
@@ -195,8 +205,7 @@ def fit(
             f"val loss {val_loss:.4f} acc {val_metric:.4f}"
         )
 
-    return hist
-
+    return hist, explain_images
 
 @dataclass
 class Predictions:
@@ -350,7 +359,7 @@ def plot_random_misclassified_cases(
 
     dataset = data_loader.dataset
 
-    for ax, idx in zip(axes, selected_idx, strict=True):
+    for ax, idx in zip(axes, selected_idx, strict=False):
         idx = idx.item()
 
         # Access image and label from dataset
