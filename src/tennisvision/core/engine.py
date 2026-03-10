@@ -164,10 +164,10 @@ def fit(
         hist.lr.append(float(optimizer.param_groups[0]["lr"]))
 
         if explainability:
-            img1, img2 = explainability_for_training(model, epoch, train_loader, device, explain_every=5, explain_sample = 3)
+            img1, img2 = explainability_for_training(model, epoch, train_loader, device, explain_every=2, explain_sample = 3)
             if img1 is not None and img2 is not None:
                 explain_images[epoch] = img1, img2
-                
+
         # lr scheduler per epoch
         if scheduler is not None and not scheduler_step_per_batch:
             if isinstance(scheduler, ReduceLROnPlateau):

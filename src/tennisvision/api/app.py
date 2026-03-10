@@ -15,7 +15,7 @@ from pydantic import BaseModel
 from tennisvision.core.data import build_preprocess
 from tennisvision.core.explainability import gradcam_heatmap, overlay_heatmap, preprocess_PIL
 from tennisvision.core.mlflow_utils import load_model_from_mlflow, setup_mlflow
-from tennisvision.core.utils import rgb_ndarray_to_png_bytes
+from tennisvision.core.utils import concat_rgb, rgb_ndarray_to_png_bytes
 
 logger = logging.getLogger()
 
@@ -251,7 +251,7 @@ async def predict_batch(request: Request, files: list[UploadFile] = File(...), t
     
 
 @app.post("/explain") #TODO make it predict explain
-async def explain(request: Request, file: UploadFile = File(...), top_pred: int = 2):
+async def explain(request: Request, file: UploadFile = File(...)):
     raw = await file.read()
 
     if not (file.content_type or "").startswith("image/"):
@@ -279,7 +279,8 @@ async def explain(request: Request, file: UploadFile = File(...), top_pred: int 
     overlay_pred1 = overlay_heatmap(image, heatmap_pred1, alpha=0.4, is_rgb=True)
     overlay_pred2 = overlay_heatmap(image, heatmap_pred2, alpha=0.4, is_rgb=True)
 
-    png_bytes = rgb_ndarray_to_png_bytes(overlay_pred1)
+    combined = concat_rgb(overlay_pred1, overlay_pred2)
+    png_bytes = rgb_ndarray_to_png_bytes(combined)
 
     return Response(content=png_bytes, media_type="image/png")
 

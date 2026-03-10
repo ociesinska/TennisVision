@@ -59,3 +59,17 @@ def rgb_ndarray_to_png_bytes(arr: np.ndarray) -> bytes:
     buf = io.BytesIO()
     img.save(buf, format="PNG")
     return buf.getvalue()
+
+def concat_rgb(a: np.ndarray, b: np.ndarray) -> np.ndarray:
+    # a,b: RGB uint8 (H,W,3)
+    if a.dtype != np.uint8:
+        a = np.clip(a, 0, 255).astype(np.uint8)
+    if b.dtype != np.uint8:
+        b = np.clip(b, 0, 255).astype(np.uint8)
+
+    if a.shape != b.shape:
+        b_img = Image.fromarray(b, mode="RGB").resize((a.shape[1], a.shape[0]))
+        b = np.array(b_img, dtype=np.uint8)
+
+    return np.concatenate([a, b], axis=0)
+
