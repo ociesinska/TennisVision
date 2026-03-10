@@ -87,7 +87,7 @@ def overlay_heatmap(img: Image.Image | np.ndarray,
     return overlay
 
 
-def explainability_for_training(model, epoch, data_loader, device, explain_every=2, explain_sample = 3):
+def explainability_for_training(model, epoch, data_loader, device, explain_every=2, explain_sample=3):
     torch.manual_seed(42)
 
     if explain_sample > 5:
@@ -95,23 +95,33 @@ def explainability_for_training(model, epoch, data_loader, device, explain_every
         raise Warning("explain_sample should not exceed 5. Setting explain_sample to 5.")
 
     if epoch % explain_every == 0:
-
         # taking a sample of images from each epoch
-        rand_idx = torch.randperm(len(data_loader))[:explain_sample]
-        explain_imgs = [data_loader.dataset[idx] for idx in rand_idx]
-        for img in explain_imgs:
-            pred = model(img)
+        rand_idx = torch.randperm(len(data_loader.dataset))[:explain_sample]
+        
+        for idx in rand_idx:
+            img_tensor, _ = data_loader.dataset[idx]
+            x = img_tensor.unsqueeze(0).to(device)
+            
+            with torch.no_grad():
+                pred = model(x)
             top2_idx = pred.topk(k=2, dim=1).indices
             pred_idx1 = top2_idx[:, 0]
             pred_idx2 = top2_idx[:, 1]
 
-            conv_layer = model.features[-2] # TODO: this is adjusted for mobilenet, adjust to other model types
-            heatmap_pred1 = gradcam_heatmap(model=model, x=img, target=pred_idx1, conv_layer=conv_layer, device=device)
-            heatmap_pred2 = gradcam_heatmap(model=model, x=img, target=pred_idx2, conv_layer=conv_layer, device=device)
+            conv_layer = model.features[-2]  # TODO: this is adjusted for mobilenet, adjust to other model types
+            heatmap_pred1 = gradcam_heatmap(model=model, x=x, target=pred_idx1, conv_layer=conv_layer, device=device)
+            heatmap_pred2 = gradcam_heatmap(model=model, x=x, target=pred_idx2, conv_layer=conv_layer, device=device)
 
-            overlay_pred1 = overlay_heatmap(img, heatmap_pred1, alpha=0.4, is_rgb=True)
-            overlay_pred2 = overlay_heatmap(img, heatmap_pred2, alpha=0.4, is_rgb=True)
-    
+            # denormalize tensor back to image for overlay
+            mean = np.array([0.485, 0.456, 0.406])
+            std = np.array([0.229, 0.224, 0.225])
+            img_np = img_tensor.permute(1, 2, 0).cpu().numpy()  # CHW -> HWC
+            img_np = (img_np * std + mean) * 255.0
+            img_np = np.clip(img_np, 0, 255).astype(np.uint8)
+
+            overlay_pred1 = overlay_heatmap(img_np, heatmap_pred1, alpha=0.4, is_rgb=True)
+            overlay_pred2 = overlay_heatmap(img_np, heatmap_pred2, alpha=0.4, is_rgb=True)
+
         return overlay_pred1, overlay_pred2
     else:
         return None, None

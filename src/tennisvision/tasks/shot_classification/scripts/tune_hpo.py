@@ -135,9 +135,9 @@ def main(trials=6) -> None:
         final_run_id = child_runs[0].info.run_id if child_runs else None
 
         # Register final model
-        if final_run_id:
-            final_model_uri = f"runs:/{final_run_id}/model"
-            mlflow.register_model(model_uri=final_model_uri, name="TennisVision")
+        # if final_run_id:
+        #     final_model_uri = f"runs:/{final_run_id}/model"
+        #     mlflow.register_model(model_uri=final_model_uri, name="TennisVision")
 
 
 if __name__ == "__main__":
