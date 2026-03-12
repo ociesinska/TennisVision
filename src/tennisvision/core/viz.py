@@ -1,6 +1,8 @@
 import matplotlib.pyplot as plt
 import torch
 
+from tennisvision.core.data import IMAGENET_MEAN, IMAGENET_STD
+
 
 def plot_image(image):  # plt needs HWC
     plt.imshow(image.permute(1, 2, 0))
@@ -19,8 +21,8 @@ def show_batch(images, idx_to_class, labels, n=12, ncols=4, denormalize=False):
         img = images[i].permute(1, 2, 0)  #  # CHW -> HWC
 
         if denormalize:
-            mean = torch.tensor([0.485, 0.456, 0.406]).view(1, 1, 3)  # make (1,1,3) from (3,)
-            std = torch.tensor([0.229, 0.224, 0.225]).view(1, 1, 3)
+            mean = torch.tensor(IMAGENET_MEAN).view(1, 1, 3)
+            std = torch.tensor(IMAGENET_STD).view(1, 1, 3)
             img = (img * std + mean).clamp(0, 1)
 
         axes[i].imshow(img)

@@ -1,7 +1,9 @@
-.PHONY: format lint format_and_lint install 
+.PHONY: format lint format_and_lint install sync
 
-install:
-	uv pip install -e . && .venv/bin/pip install -e . --no-deps
+install: sync
+
+sync:
+	uv sync
 
 lint:
 	uv run ruff check . --fix

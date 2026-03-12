@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+import warnings
+
 import cv2
 import numpy as np
 import torch
 import torch.nn as nn
 from captum.attr import LayerAttribution, LayerGradCam
 from PIL import Image
+
+from tennisvision.core.data import IMAGENET_MEAN, IMAGENET_STD
 
 
 def get_last_conv_layer(model: nn.Module) -> nn.Module:
@@ -38,11 +42,15 @@ def gradcam_heatmap(
         return heat
 
 def pick_cam_layer(model: nn.Module, model_name: str) -> nn.Module:
-     #TODO: change this methodology
-    if "resnet" in model_name:
-         return model.layer3[-1]
-    if "mobilenet_v3" in model_name:
-         return model.features[-1]
+    name = model_name.lower()
+    if "resnet" in name:
+        return model.layer4[-1]
+    if "mobilenet_v3" in name:
+        return model.features[-1]
+    if "efficientnet" in name:
+        return model.features[-1]
+    if "convnext" in name:
+        return model.features[-1]
     raise ValueError(f"Unknown model type for model {model_name}")
 
 def overlay_heatmap(img: Image.Image | np.ndarray,
@@ -56,7 +64,8 @@ def overlay_heatmap(img: Image.Image | np.ndarray,
 
     Returns: overlay image as np.ndarray (H, W, 3) in RGB by default.
     
-    Parameter is_rgb: if False, the input image is in BGR and will be converted to RGB; if True, the input image is already in RGB and does not require conversion.
+    Parameter is_rgb: if False, the input image is in BGR and will be converted to RGB;
+    if True, the input image is already in RGB and does not require conversion.
     """
     # image --> numpy (RGB)
     if isinstance(img, Image.Image):
@@ -87,17 +96,21 @@ def overlay_heatmap(img: Image.Image | np.ndarray,
     return overlay
 
 
-def explainability_for_training(model, epoch, data_loader, device, explain_every=2, explain_sample=3):
+def explainability_for_training(model, epoch, data_loader, device, *, model_name="resnet18", explain_every=2, explain_sample=3):
     torch.manual_seed(42)
 
     if explain_sample > 5:
+        warnings.warn("explain_sample should not exceed 5. Setting explain_sample to 5.", stacklevel=2)
         explain_sample = 5
-        raise Warning("explain_sample should not exceed 5. Setting explain_sample to 5.")
 
     if epoch % explain_every == 0:
-        # taking a sample of images from each epoch
+        results = []
+        conv_layer = pick_cam_layer(model, model_name)
         rand_idx = torch.randperm(len(data_loader.dataset))[:explain_sample]
-        
+
+        mean = np.array(IMAGENET_MEAN)
+        std = np.array(IMAGENET_STD)
+
         for idx in rand_idx:
             img_tensor, _ = data_loader.dataset[idx]
             x = img_tensor.unsqueeze(0).to(device)
@@ -108,13 +121,10 @@ def explainability_for_training(model, epoch, data_loader, device, explain_every
             pred_idx1 = top2_idx[:, 0]
             pred_idx2 = top2_idx[:, 1]
 
-            conv_layer = model.features[-2]  # TODO: this is adjusted for mobilenet, adjust to other model types
             heatmap_pred1 = gradcam_heatmap(model=model, x=x, target=pred_idx1, conv_layer=conv_layer, device=device)
             heatmap_pred2 = gradcam_heatmap(model=model, x=x, target=pred_idx2, conv_layer=conv_layer, device=device)
 
             # denormalize tensor back to image for overlay
-            mean = np.array([0.485, 0.456, 0.406])
-            std = np.array([0.229, 0.224, 0.225])
             img_np = img_tensor.permute(1, 2, 0).cpu().numpy()  # CHW -> HWC
             img_np = (img_np * std + mean) * 255.0
             img_np = np.clip(img_np, 0, 255).astype(np.uint8)
@@ -122,6 +132,8 @@ def explainability_for_training(model, epoch, data_loader, device, explain_every
             overlay_pred1 = overlay_heatmap(img_np, heatmap_pred1, alpha=0.4, is_rgb=True)
             overlay_pred2 = overlay_heatmap(img_np, heatmap_pred2, alpha=0.4, is_rgb=True)
 
-        return overlay_pred1, overlay_pred2
+            results.append((overlay_pred1, overlay_pred2))
+
+        return results
     else:
-        return None, None
+        return []

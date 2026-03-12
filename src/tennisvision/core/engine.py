@@ -11,9 +11,10 @@ from sklearn.metrics import ConfusionMatrixDisplay, classification_report, confu
 from torch.optim.lr_scheduler import LRScheduler, ReduceLROnPlateau
 from torch.utils.data import DataLoader
 
+from tennisvision.core.data import IMAGENET_MEAN, IMAGENET_STD
 from tennisvision.core.explainability import explainability_for_training
 
-logger = logging.getLogger()
+logger = logging.getLogger(__name__)
 
 
 def make_optimizer(model, lr=1e-3, wd=1e-4):
@@ -40,7 +41,7 @@ class AccuracyMeter:
 
     def compute(self) -> torch.Tensor:
         if self.total == 0:
-            return torch.Tensor(0.0)
+            return torch.tensor(0.0)
         return torch.tensor(self.correct) / torch.tensor(self.total)
 
 
@@ -63,7 +64,7 @@ class EarlyStopping:
             if self.no_improvement_count >= self.patience:
                 self.stop_training = True
                 if self.verbose:
-                    print("Stopping early as no improvement has been observed for {self.patience} epochs.")
+                    print(f"Stopping early as no improvement has been observed for {self.patience} epochs.")
 
 
 def train_one_epoch(
@@ -99,6 +100,7 @@ class History:
     val_loss: list[float] = field(default_factory=list)
     val_metric: list[float] = field(default_factory=list)
     best_val_metric: float = -1.0
+    best_epoch: int = -1
     lr: list[float] = field(default_factory=list)
 
 
@@ -133,8 +135,11 @@ def fit(
     *,
     scheduler: LRScheduler | None = None,
     scheduler_step_per_batch: bool = False,
-    explainability: bool = False
-) -> History:
+    explainability: bool = False,
+    model_name: str = "resnet18",
+    early_stopping_patience: int = 5,
+    early_stopping_delta: float = 0.0,
+) -> tuple[History, dict]:
 
     if metric is None:
         metric = AccuracyMeter()
@@ -143,7 +148,7 @@ def fit(
     best_epoch = -1
 
     hist = History()
-    early_stopping = EarlyStopping()
+    early_stopping = EarlyStopping(patience=early_stopping_patience, delta=early_stopping_delta)
 
     ckpt_path = Path(ckpt_path) if ckpt_path is not None else None
     if ckpt_path is not None:
@@ -164,9 +169,9 @@ def fit(
         hist.lr.append(float(optimizer.param_groups[0]["lr"]))
 
         if explainability:
-            img1, img2 = explainability_for_training(model, epoch, train_loader, device, explain_every=2, explain_sample = 3)
-            if img1 is not None and img2 is not None:
-                explain_images[epoch] = img1, img2
+            overlays = explainability_for_training(model, epoch, train_loader, device, model_name=model_name, explain_every=2, explain_sample=3)
+            if overlays:
+                explain_images[epoch] = overlays
 
         # lr scheduler per epoch
         if scheduler is not None and not scheduler_step_per_batch:
@@ -200,7 +205,7 @@ def fit(
 
         logger.info(
             f"Epoch {epoch}/{n_epochs} | "
-            f"lr {hist.lr[-1]:.3e}"
+            f"lr {hist.lr[-1]:.3e} | "
             f"train loss {tr_loss:.4f} acc {tr_metric:.4f} | "
             f"val loss {val_loss:.4f} acc {val_metric:.4f}"
         )
@@ -319,9 +324,9 @@ def plot_random_misclassified_cases(
         std: Normalization std (for denormalization).
     """
     if std is None:
-        std = [0.229, 0.224, 0.225]
+        std = list(IMAGENET_STD)
     if mean is None:
-        mean = [0.485, 0.456, 0.406]
+        mean = list(IMAGENET_MEAN)
 
     y_true = predictions.y_true
     y_pred = predictions.y_pred

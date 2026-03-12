@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import logging
 from dataclasses import replace
 
@@ -75,14 +76,19 @@ def objective(trial: optuna.Trial, base_cfg: ExperimentConfig) -> float:
 logger = logging.getLogger(__name__)
 
 
-def main(trials=6) -> None:
+def main() -> None:
+    parser = argparse.ArgumentParser(description="HPO for TennisVision")
+    parser.add_argument("--trials", type=int, default=15, help="Number of Optuna trials")
+    parser.add_argument("--model_name", type=str, default="mobilenet_v3_large", help="Model architecture")
+    parser.add_argument("--image_root", type=str, default="data/Tennis positions/images", help="Path to image directory")
+    args = parser.parse_args()
 
     setup_logging(logging.INFO)
     logger.info("Start training")
 
     base_cfg = ExperimentConfig(
-        image_root="data/Tennis positions/images",
-        model_name="mobilenet_v3_large",
+        image_root=args.image_root,
+        model_name=args.model_name,
         head_epochs=4,
         finetune=False,
         finetune_epochs=8,
@@ -103,8 +109,8 @@ def main(trials=6) -> None:
     )
 
     with mlflow.start_run(run_name="HPO_parent"):
-        mlflow.log_param("n_trials", trials)
-        study.optimize(lambda t: objective(t, base_cfg), n_trials=trials)
+        mlflow.log_param("n_trials", args.trials)
+        study.optimize(lambda t: objective(t, base_cfg), n_trials=args.trials)
 
         mlflow.log_metric("hpo/best_value", float(study.best_value))
         mlflow.log_params({f"hpo_best/{k}": v for k, v in study.best_params.items()})
@@ -123,21 +129,6 @@ def main(trials=6) -> None:
 
         # final run (explainability images are logged to MLflow inside run_experiment)
         run_experiment(final_cfg, log_model=True, log_confusion_matrix=True, save_checkpoints=True)
-
-        # getting the last child run (which is our final model)
-        client = mlflow.tracking.MlflowClient()
-        run_id = mlflow.active_run().info.run_id
-        child_runs = client.search_runs(
-            experiment_ids=[mlflow.active_run().info.experiment_id],
-            filter_string=f"tags.mlflow.parentRunId = '{run_id}'",
-            order_by=["start_time DESC"],
-        )
-        final_run_id = child_runs[0].info.run_id if child_runs else None
-
-        # Register final model
-        # if final_run_id:
-        #     final_model_uri = f"runs:/{final_run_id}/model"
-        #     mlflow.register_model(model_uri=final_model_uri, name="TennisVision")
 
 
 if __name__ == "__main__":

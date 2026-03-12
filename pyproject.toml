@@ -22,7 +22,6 @@ dependencies = [
   "torch>=2.3",
   "torchvision>=0.18",
   "torchmetrics",
-  "ruff",
   "albumentations>=2.0.8",
   "mlflow>=3.9.0",
   "optuna>=4.7.0",

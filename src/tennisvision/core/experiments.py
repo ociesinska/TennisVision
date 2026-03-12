@@ -14,7 +14,7 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 from tennisvision.core.data import build_loaders, build_transforms, make_split
 from tennisvision.core.engine import fit, make_optimizer
-from tennisvision.core.mlflow_utils import setup_mlflow
+from tennisvision.core.mlflow_utils import _jsonable, setup_mlflow
 from tennisvision.core.models import (
     build_model,
     freeze_backbone,
@@ -23,7 +23,7 @@ from tennisvision.core.models import (
 )
 from tennisvision.core.utils import ensure_dir, get_device, now_tag, seed_everything
 
-logger = logging.getLogger()
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -65,22 +65,14 @@ class ExperimentConfig:
 
     artifacts_dir: Path = Path("artifacts")
     mlflow_dir: Path = Path("artifacts/mlflow")
-    device = "mps"
+    device: str = "auto"
+
+    # early stopping
+    early_stopping_patience: int = 5
+    early_stopping_delta: float = 0.0
 
     # explainability:
     enable_explainability: bool = False
-
-
-def _jsonable(d: dict[str, Any]) -> dict[str, Any]:
-    """Changes Path/torch.device etc. to serialized values to JSON"""
-    out: dict[str, Any] = {}
-
-    for k, v in d.items():
-        if isinstance(v, Path):
-            out[k] = str(v)
-        else:
-            out[k] = v
-    return out
 
 
 def log_history(history: Any, prefix: str = "") -> None:
@@ -188,16 +180,20 @@ def run_experiment(
             ckpt_path=head_ckpt_path,
             scheduler=scheduler_head,
             scheduler_step_per_batch=False,
-            explainability=cfg.enable_explainability
+            explainability=cfg.enable_explainability,
+            model_name=cfg.model_name,
+            early_stopping_patience=cfg.early_stopping_patience,
+            early_stopping_delta=cfg.early_stopping_delta,
         )
 
         log_history(hist_head, prefix="head/")
 
         # Log explainability images for head phase
         if cfg.enable_explainability and explain_images_head:
-            for epoch, (img1, img2) in explain_images_head.items():
-                mlflow.log_image(img1, f"explainability/head/epoch_{epoch}_pred1.png")
-                mlflow.log_image(img2, f"explainability/head/epoch_{epoch}_pred2.png")
+            for epoch, overlays in explain_images_head.items():
+                for i, (img1, img2) in enumerate(overlays):
+                    mlflow.log_image(img1, f"explainability/head/epoch_{epoch}_sample{i}_pred1.png")
+                    mlflow.log_image(img2, f"explainability/head/epoch_{epoch}_sample{i}_pred2.png")
 
         if head_ckpt_path and head_ckpt_path.exists():
             mlflow.log_artifact(str(head_ckpt_path), artifact_path="checkpoints")
@@ -233,16 +229,20 @@ def run_experiment(
                 ckpt_path=ft_ckpt_path,
                 scheduler=scheduler_ft,
                 scheduler_step_per_batch=False,
-                explainability=cfg.enable_explainability
+                explainability=cfg.enable_explainability,
+                model_name=cfg.model_name,
+                early_stopping_patience=cfg.early_stopping_patience,
+                early_stopping_delta=cfg.early_stopping_delta,
             )
 
             log_history(hist_ft, prefix="ft/")
 
             # Log explainability images for finetune phase
             if cfg.enable_explainability and explain_images_ft:
-                for epoch, (img1, img2) in explain_images_ft.items():
-                    mlflow.log_image(img1, f"explainability/finetune/epoch_{epoch}_pred1.png")
-                    mlflow.log_image(img2, f"explainability/finetune/epoch_{epoch}_pred2.png")
+                for epoch, overlays in explain_images_ft.items():
+                    for i, (img1, img2) in enumerate(overlays):
+                        mlflow.log_image(img1, f"explainability/finetune/epoch_{epoch}_sample{i}_pred1.png")
+                        mlflow.log_image(img2, f"explainability/finetune/epoch_{epoch}_sample{i}_pred2.png")
 
             if ft_ckpt_path and ft_ckpt_path.exists():
                 mlflow.log_artifact(str(ft_ckpt_path), artifact_path="checkpoints")
