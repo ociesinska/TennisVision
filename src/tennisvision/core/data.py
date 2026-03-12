@@ -79,13 +79,13 @@ def build_transforms(
     # val / test transforms
 
     if weights is not None:
-        val_tmfs = weights.transforms()
+        val_tfms = weights.transforms()
     else:
-        val_tmfs = T.Compose([T.Resize((img_size, img_size)), T.ToTensor(), T.Normalize(mean=mean, std=std)])
+        val_tfms = T.Compose([T.Resize((img_size, img_size)), T.ToTensor(), T.Normalize(mean=mean, std=std)])
 
     # train transforms
     if not train_aug:
-        train_tfms = val_tmfs
+        train_tfms = val_tfms
     else:
         train_tfms = T.Compose(
             [
@@ -97,14 +97,14 @@ def build_transforms(
             ]
         )
 
-    return train_tfms, val_tmfs
+    return train_tfms, val_tfms
 
 
 def build_loaders(
     image_root: str | Path,
     split: Split,
     train_tfms,
-    val_tmfs,
+    val_tfms,
     batch_size: int = 32,
     num_workers: int = 0,
     pin_memory: bool = False,  # not available on mps now
@@ -114,8 +114,8 @@ def build_loaders(
     """
 
     ds_train_all = datasets.ImageFolder(image_root, transform=train_tfms)
-    ds_val_all = datasets.ImageFolder(root=str(image_root), transform=val_tmfs)
-    ds_test_all = datasets.ImageFolder(root=str(image_root), transform=val_tmfs)
+    ds_val_all = datasets.ImageFolder(root=str(image_root), transform=val_tfms)
+    ds_test_all = datasets.ImageFolder(root=str(image_root), transform=val_tfms)
 
     train_ds = Subset(ds_train_all, split.idx_train)
     val_ds = Subset(ds_val_all, split.idx_val)

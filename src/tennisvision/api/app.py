@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import json
 import logging
 import os
 import time
@@ -9,17 +10,25 @@ from contextlib import asynccontextmanager
 import torch
 from fastapi import FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.responses import JSONResponse, Response
+from mlflow.tracking import MlflowClient
 from PIL import Image
 from pydantic import BaseModel
 
 from tennisvision.core.data import build_preprocess
-from tennisvision.core.explainability import gradcam_heatmap, overlay_heatmap, preprocess_PIL
+from tennisvision.core.explainability import gradcam_heatmap, overlay_heatmap, pick_cam_layer, preprocess_PIL
 from tennisvision.core.mlflow_utils import load_model_from_mlflow, setup_mlflow
 from tennisvision.core.utils import concat_rgb, rgb_ndarray_to_png_bytes
 
-logger = logging.getLogger()
+logger = logging.getLogger(__name__)
 
 PREPROCESS = build_preprocess()
+
+# --- API Limits ---
+MAX_FILE_SIZE_MB = 10
+MAX_BATCH_SIZE_MB = 25
+MAX_BATCH_FILES = 64
+
+_DEFAULT_IDX_TO_CLASS = {0: "backhand", 1: "forehand", 2: "ready_position", 3: "serve"}
 
 class PredictResponse(BaseModel):
     label: str
@@ -47,16 +56,57 @@ class BatchPredictResponse(BaseModel):
     latency_ms: float
     results: list[BatchItem]
 
+
+def _load_idx_to_class(model_uri: str, run_id: str, tracking_uri: str) -> dict[int, str]:
+    """Load idx_to_class from env var, MLflow artifacts, or fall back to defaults."""
+    # 1. Try from env var (JSON string)
+    env_json = os.getenv("IDX_TO_CLASS")
+    if env_json:
+        raw = json.loads(env_json)
+        return {int(k): v for k, v in raw.items()}
+
+    # 2. Try from MLflow artifacts
+    try:
+        client = MlflowClient(tracking_uri=tracking_uri)
+        source_run_id = None
+
+        if model_uri and model_uri.startswith("models:/"):
+            rest = model_uri[len("models:/"):]
+            if "@" in rest:
+                name, alias = rest.split("@", 1)
+                mv = client.get_model_version_by_alias(name, alias)
+                source_run_id = mv.run_id
+            elif "/" in rest:
+                name, version = rest.rsplit("/", 1)
+                mv = client.get_model_version(name, version)
+                source_run_id = mv.run_id
+        elif run_id:
+            source_run_id = run_id
+
+        if source_run_id:
+            path = client.download_artifacts(source_run_id, "labels/idx_to_class.json")
+            with open(path) as f:
+                raw = json.load(f)
+            return {int(k): v for k, v in raw.items()}
+    except Exception:
+        logger.warning("Could not load idx_to_class from MLflow artifacts.")
+
+    # 3. Fallback
+    logger.warning(
+        "Using default idx_to_class. Set IDX_TO_CLASS env var or ensure model run has labels/idx_to_class.json artifact."
+    )
+    return dict(_DEFAULT_IDX_TO_CLASS)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     tracking_uri = os.getenv("MLFLOW_TRACKING_URI", "http://127.0.0.1:8080")
     setup_mlflow(experiment_name=None, tracking_uri=tracking_uri, set_experiment=False)
 
     device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
-    # loading model from the registry
     model_uri_env = os.getenv("MODEL_URI", "models:/TennisVision@champion")
-    # alternatively loading model from a specific run
     run_id = os.getenv("RUN_ID", "")
+    model_name = os.getenv("MODEL_NAME", "mobilenet_v3_large")
 
     if model_uri_env:
         model, resolved_uri = load_model_from_mlflow(model_uri=model_uri_env, device=device)
@@ -67,10 +117,13 @@ async def lifespan(app: FastAPI):
 
     model.eval()
 
+    idx_to_class = _load_idx_to_class(model_uri_env, run_id, tracking_uri)
+
     app.state.model = model
     app.state.device = device
     app.state.model_uri = resolved_uri
-    app.state.idx_to_class = {0: "backhand", 1: "forehand", 2: "ready_position", 3: "serve"}
+    app.state.model_name = model_name
+    app.state.idx_to_class = idx_to_class
 
     yield
 
@@ -126,8 +179,8 @@ async def predict(request: Request, file: UploadFile = File(...), top_k: int = 3
 
         raw = await file.read()
 
-        if len(raw) > 10 * 1024 * 1024:  # 10MB limit
-            raise HTTPException(status_code=413, detail="File too large (>10MB).")
+        if len(raw) > MAX_FILE_SIZE_MB * 1024 * 1024:
+            raise HTTPException(status_code=413, detail=f"File too large (>{MAX_FILE_SIZE_MB}MB).")
 
         try:
             img = Image.open(io.BytesIO(raw))
@@ -197,8 +250,8 @@ async def predict_batch(request: Request, files: list[UploadFile] = File(...), t
             raise HTTPException(status_code=503, detail="Model not loaded yet.")
         if not files:
             raise HTTPException(status_code=400, detail="No files provided.")
-        if len(files) > 64:
-            raise HTTPException(status_code=413, detail="Too many files (max 64).")
+        if len(files) > MAX_BATCH_FILES:
+            raise HTTPException(status_code=413, detail=f"Too many files (max {MAX_BATCH_FILES}).")
 
         images: list[Image.Image] = []
         filenames: list[str] = []
@@ -215,8 +268,8 @@ async def predict_batch(request: Request, files: list[UploadFile] = File(...), t
 
             raw = await f.read()
             total_bytes += len(raw)
-            if total_bytes > 25 * 1024 * 1024:  # 25 MB limit per the whole request
-                raise HTTPException(status_code=413, detail="Batch payload too lage (>25MB).")
+            if total_bytes > MAX_BATCH_SIZE_MB * 1024 * 1024:
+                raise HTTPException(status_code=413, detail=f"Batch payload too large (>{MAX_BATCH_SIZE_MB}MB).")
 
             try:
                 img = Image.open(io.BytesIO(raw))
@@ -250,7 +303,7 @@ async def predict_batch(request: Request, files: list[UploadFile] = File(...), t
         raise HTTPException(status_code=500, detail=str(e)) from e
     
 
-@app.post("/explain") #TODO make it predict explain
+@app.post("/explain")
 async def explain(request: Request, file: UploadFile = File(...)):
     raw = await file.read()
 
@@ -260,18 +313,15 @@ async def explain(request: Request, file: UploadFile = File(...)):
     image = Image.open(io.BytesIO(raw))
     model = request.app.state.model
     device = request.app.state.device
-    request.app.state.idx_to_class = {0: "backhand", 1: "forehand", 2: "ready_position", 3: "serve"}
-    idx_to_class = app.state.idx_to_class # TODO
+    model_name = request.app.state.model_name
 
     x = preprocess_PIL(image, PREPROCESS)
     x = x.to(device)
-    pred = model(x) # [B, C]
-    top2_idx = pred.topk(k=2, dim=1).indices # [B, 2]
+    pred = model(x)
+    top2_idx = pred.topk(k=2, dim=1).indices
     pred_idx1 = top2_idx[:, 0].item()
     pred_idx2 = top2_idx[:, 1].item()
-    pred_class_1 = idx_to_class[pred_idx1]
-    pred_class_2 = idx_to_class[pred_idx2]
-    conv_layer = model.features[-2] #TODO adjust to other model types
+    conv_layer = pick_cam_layer(model, model_name)
 
     heatmap_pred1 = gradcam_heatmap(model=model, x=x, target=pred_idx1, conv_layer=conv_layer, device=device)
     heatmap_pred2 = gradcam_heatmap(model=model, x=x, target=pred_idx2, conv_layer=conv_layer, device=device)
@@ -283,5 +333,3 @@ async def explain(request: Request, file: UploadFile = File(...)):
     png_bytes = rgb_ndarray_to_png_bytes(combined)
 
     return Response(content=png_bytes, media_type="image/png")
-
-    

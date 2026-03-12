@@ -26,7 +26,7 @@ TennisVision is a modular computer vision project for tennis analytics, featurin
 
 1. Start MLflow server (required for model loading):
    ```bash
-   mlflow ui --port 8080
+   make mlflow
    ```
 2. Start FastAPI server:
    ```bash

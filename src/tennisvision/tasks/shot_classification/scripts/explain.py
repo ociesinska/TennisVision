@@ -27,17 +27,15 @@ def main():
     group.add_argument("--image", type=str, help="Path to a single image file")
     group.add_argument("--input-dir", type=str, help="Path to a directory with images")
 
-    # parser.add_argument("--out-dir", type=str, default=get_default_out_dir(), help="Output directory (default: artifacts/explain/<timestamp>/)")
-    # parser.add_argument("--top-k", type=int, default=3, help="Top K classes for CAM (default: 3)")
-    # parser.add_argument("--target", type=str, default="pred", help='Target for explanation: "pred" or "idx:<int>"')
+    parser.add_argument("--model_name", type=str, default="resnet18", help="Model architecture name (e.g. resnet18, mobilenet_v3_large)")
 
     args = parser.parse_args()
 
     setup_logging(logging.INFO)
-    logger = logging.getLogger()
+    logger = logging.getLogger(__name__)
     logger.info("Explainability started.")
     device = get_device()
-    mlflow_tracking_uri = "http://127.0.0.1:8080"
+    mlflow_tracking_uri = os.getenv("MLFLOW_TRACKING_URI", "http://127.0.0.1:8080")
     setup_mlflow(experiment_name="Explainability", tracking_uri=mlflow_tracking_uri, set_experiment=True)
 
     with mlflow.start_run(run_name =  f"explain-{time.strftime('Y%m%d_%H%M%S')}"):
@@ -71,11 +69,8 @@ def main():
             idx_to_class = {0: "backhand", 1: "forehand", 2: "ready_position", 3: "serve"}
         
         preprocess = build_preprocess()
-        # model_name = get_model_name() # TODO
-        model_name = "mobilenet_v3_large"
+        model_name = args.model_name
         conv_layer = pick_cam_layer(model=model, model_name=model_name)
-        # log which layers we have 
-                        
 
         for i, img in enumerate(image_list):
             image = Image.open(img)
