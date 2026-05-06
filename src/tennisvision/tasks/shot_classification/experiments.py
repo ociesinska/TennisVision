@@ -12,10 +12,10 @@ import torch.nn as nn
 from mlflow.models import infer_signature
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 
-from tennisvision.core.data import build_loaders, build_transforms, make_split
-from tennisvision.core.engine import fit, make_optimizer
+from tennisvision.tasks.shot_classification.data import build_loaders, build_transforms, make_split
+from tennisvision.tasks.shot_classification.engine import fit, make_optimizer
 from tennisvision.core.mlflow_utils import _jsonable, setup_mlflow
-from tennisvision.core.models import (
+from tennisvision.tasks.shot_classification.models import (
     build_model,
     freeze_backbone,
     unfreeze_head,

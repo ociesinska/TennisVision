@@ -9,7 +9,7 @@ import torch.nn as nn
 from captum.attr import LayerAttribution, LayerGradCam
 from PIL import Image
 
-from tennisvision.core.data import IMAGENET_MEAN, IMAGENET_STD
+from tennisvision.tasks.shot_classification.data import IMAGENET_MEAN, IMAGENET_STD
 
 
 def get_last_conv_layer(model: nn.Module) -> nn.Module:

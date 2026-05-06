@@ -1,7 +1,7 @@
 import argparse
 import logging
 
-from tennisvision.core.experiments import ExperimentConfig, run_experiment
+from tennisvision.tasks.shot_classification.experiments import ExperimentConfig, run_experiment
 from tennisvision.core.utils import setup_logging
 
 logger = logging.getLogger(__name__)

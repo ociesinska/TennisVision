@@ -1,7 +1,7 @@
 import matplotlib.pyplot as plt
 import torch
 
-from tennisvision.core.data import IMAGENET_MEAN, IMAGENET_STD
+from tennisvision.tasks.shot_classification.data import IMAGENET_MEAN, IMAGENET_STD
 
 
 def plot_image(image):  # plt needs HWC

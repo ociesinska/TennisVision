@@ -7,7 +7,7 @@ from dataclasses import replace
 import mlflow
 import optuna
 
-from tennisvision.core.experiments import ExperimentConfig, run_experiment
+from tennisvision.tasks.shot_classification.experiments import ExperimentConfig, run_experiment
 from tennisvision.core.mlflow_utils import setup_mlflow
 from tennisvision.core.utils import setup_logging
 

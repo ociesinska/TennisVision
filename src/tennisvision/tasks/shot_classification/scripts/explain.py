@@ -9,7 +9,7 @@ import mlflow
 from mlflow import MlflowClient
 from PIL import Image
 
-from tennisvision.core.data import build_preprocess
+from tennisvision.tasks.shot_classification.data import build_preprocess
 from tennisvision.core.explainability import gradcam_heatmap, overlay_heatmap, pick_cam_layer, preprocess_PIL
 from tennisvision.core.mlflow_utils import load_model_from_mlflow, setup_mlflow
 from tennisvision.core.utils import get_device, setup_logging
