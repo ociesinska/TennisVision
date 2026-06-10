@@ -7,9 +7,9 @@ from dataclasses import replace
 import mlflow
 import optuna
 
-from tennisvision.tasks.shot_classification.experiments import ExperimentConfig, run_experiment
 from tennisvision.core.mlflow_utils import setup_mlflow
 from tennisvision.core.utils import setup_logging
+from tennisvision.tasks.shot_classification.experiments import ExperimentConfig, run_experiment
 
 
 def objective(trial: optuna.Trial, base_cfg: ExperimentConfig) -> float:

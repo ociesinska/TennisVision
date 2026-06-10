@@ -11,8 +11,8 @@ from sklearn.metrics import ConfusionMatrixDisplay, classification_report, confu
 from torch.optim.lr_scheduler import LRScheduler, ReduceLROnPlateau
 from torch.utils.data import DataLoader
 
-from tennisvision.tasks.shot_classification.data import IMAGENET_MEAN, IMAGENET_STD
 from tennisvision.core.explainability import explainability_for_training
+from tennisvision.tasks.shot_classification.data import IMAGENET_MEAN, IMAGENET_STD
 
 logger = logging.getLogger(__name__)
 

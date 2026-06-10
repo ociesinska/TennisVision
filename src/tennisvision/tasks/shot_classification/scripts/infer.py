@@ -6,11 +6,17 @@ from datetime import datetime
 import mlflow
 from mlflow.tracking import MlflowClient
 
-from tennisvision.tasks.shot_classification.data import Split, build_loaders, build_transforms
-from tennisvision.tasks.shot_classification.engine import evaluate_split, log_eval_to_mlflow, plot_confusion_matrix, plot_random_misclassified_cases, predict_loader
-from tennisvision.tasks.shot_classification.experiments import ExperimentConfig
 from tennisvision.core.mlflow_utils import load_model_from_mlflow, setup_mlflow
 from tennisvision.core.utils import get_device, setup_logging
+from tennisvision.tasks.shot_classification.data import Split, build_loaders, build_transforms
+from tennisvision.tasks.shot_classification.engine import (
+    evaluate_split,
+    log_eval_to_mlflow,
+    plot_confusion_matrix,
+    plot_random_misclassified_cases,
+    predict_loader,
+)
+from tennisvision.tasks.shot_classification.experiments import ExperimentConfig
 
 logger = logging.getLogger(__name__)
 
