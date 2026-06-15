@@ -4,7 +4,9 @@ import logging
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+import mlflow
 from PIL import Image, ImageDraw, ImageFont
+from ultralytics import YOLO
 
 from tennisvision.core.utils import get_device
 from tennisvision.tasks.detection.data import validate_inputs
@@ -23,7 +25,7 @@ def run_ultralytics_experiment(cfg: DetectionExperimentConfig):
 
     validate_inputs(cfg.data_config)
 
-    device = get_device() if cfg.device == "auto" else cfg.device
+    device = get_device(cfg.device)
 
     model = YOLO(cfg.model)
 
@@ -34,7 +36,7 @@ def run_ultralytics_experiment(cfg: DetectionExperimentConfig):
         batch=cfg.batch,
         device=device,
         workers=cfg.workers,
-        project=cfg.project_dir,
+        project=str(cfg.project_dir),
         name=cfg.run_name,
         seed=cfg.seed,
         deterministic=cfg.deterministic,
@@ -60,7 +62,7 @@ def load_ultralytics_detector(model_path: str | Path) -> Any:
 
 def predict_ultralytics_image(model: Any, image_path: str | Path, cfg: DetectionInferenceConfig):
 
-    device = get_device() if cfg.device == "auto" else cfg.device
+    device = get_device(cfg.device)
 
     results = model.predict(
         source=str(image_path),
@@ -127,4 +129,56 @@ def viz_detected_boxes(
         image.save(output_path)
 
     return image
-    
+
+def save_yolo_artifacts(save_dir: str | Path) -> dict[str, list[Path]]:
+    save_dir = Path(save_dir)
+
+    artifact_groups: dict[str, list[Path]] = {
+        "models": [
+            save_dir / "weights" / "best.pt",
+            save_dir / "weights" / "last.pt",
+        ],
+        "training": [
+            save_dir / "args.yaml",
+            save_dir / "results.csv",
+        ],
+        "plots": [
+            save_dir / "results.png",
+            save_dir / "confusion_matrix.png",
+            save_dir / "confusion_matrix_normalized.png",
+            save_dir / "PR_curve.png",
+            save_dir / "P_curve.png",
+            save_dir / "R_curve.png",
+            save_dir / "F1_curve.png",
+        ],
+    }
+
+    existing_artifacts: dict[str, list[Path]] = {}
+    for artifact_group, paths in artifact_groups.items():
+
+        existing_paths = [path for path in paths if path.is_file()]
+
+        if existing_paths:
+            existing_artifacts[artifact_group] = existing_paths
+
+    return existing_artifacts
+
+def load_ultralytics_detector_from_mlflow(
+    *,
+    run_id: str | None = None,
+    model_uri: str | None = None,
+    tracking_uri: str | None = None,
+    artifact_path: str = "models/best.pt",
+) -> Any:
+
+    if (run_id is None) == (model_uri is None):
+        raise ValueError("Provide exactly one of: run_id or model_uri.")
+
+    if tracking_uri:
+        mlflow.set_tracking_uri(tracking_uri)
+
+    if model_uri is None:
+        model_uri = f"runs:/{run_id}/{artifact_path}"
+
+    local_path = mlflow.artifacts.download_artifacts(artifact_uri=model_uri)
+    return YOLO(local_path)
