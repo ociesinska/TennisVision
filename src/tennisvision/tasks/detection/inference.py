@@ -3,8 +3,16 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from tennisvision.tasks.detection.backends.torchvision_detection import load_torchvision_detector, predict_torchvision_image
-from tennisvision.tasks.detection.backends.ultralytics_yolo import load_ultralytics_detector, predict_ultralytics_image, viz_detected_boxes
+from tennisvision.tasks.detection.backends.torchvision_detection import (
+    load_torchvision_detector,
+    predict_torchvision_image,
+)
+from tennisvision.tasks.detection.backends.ultralytics_yolo import (
+    load_ultralytics_detector,
+    load_ultralytics_detector_from_mlflow,
+    predict_ultralytics_image,
+    viz_detected_boxes,
+)
 from tennisvision.tasks.detection.types import DetectionResult
 
 
@@ -17,10 +25,20 @@ class DetectionInferenceConfig:
     iou: float = 0.7
     device: str = "auto"
     visualize: bool = False
+    visualize_dir: Path = Path("data/artifacts/detection_test_results")
+    model_uri: str | None = None
+    run_id: str | None = None
+    tracking_uri: str | None = None
 
 
 def load_detector(cfg: DetectionInferenceConfig):
     if cfg.backend == "ultralytics":
+        if cfg.model_uri is not None or cfg.run_id is not None:
+            return load_ultralytics_detector_from_mlflow(
+                run_id=cfg.run_id,
+                model_uri=cfg.model_uri,
+                tracking_uri=cfg.tracking_uri,
+            )
         return load_ultralytics_detector(cfg.model_path)
 
     if cfg.backend == "torchvision":
@@ -37,9 +55,7 @@ def predict_image(model, image_path: str | Path, cfg: DetectionInferenceConfig) 
         raise ValueError(f"Unknown backend: {cfg.backend}")
 
     if cfg.visualize:
-        viz_detected_boxes(
-            detection_results,
-            Path("data/artifacts/detection_test_results"),
-        )
-
+        image_stem = Path(image_path).stem
+        save_path = cfg.visualize_dir / f"{image_stem}_detections.png"
+        viz_detected_boxes(detection_results, save_path=save_path)
     return detection_results
