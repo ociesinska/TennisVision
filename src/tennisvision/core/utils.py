@@ -50,18 +50,21 @@ def ensure_dir(path: str | Path) -> Path:
 def setup_logging(level: int = logging.INFO) -> None:
     logging.basicConfig(level=level, format="%(asctime)s | %(levelname)s | %(name)s | %(message)s", datefmt="%H:%M:%S", force=True)
 
+
 def get_default_out_dir():
     timestamp = time.strftime("%Y%m%d_%H%M%S")
     return f"artifacts/explain/{timestamp}"
 
+
 def rgb_ndarray_to_png_bytes(arr: np.ndarray) -> bytes:
     # arr: (H, W, 3) in RGB
     if arr.dtype != np.uint8:
-            arr = np.clip(arr, 0, 255).astype(np.uint8)
+        arr = np.clip(arr, 0, 255).astype(np.uint8)
     img = Image.fromarray(arr, mode="RGB")
     buf = io.BytesIO()
     img.save(buf, format="PNG")
     return buf.getvalue()
+
 
 def concat_rgb(a: np.ndarray, b: np.ndarray) -> np.ndarray:
     # a,b: RGB uint8 (H,W,3)

@@ -30,6 +30,7 @@ MAX_BATCH_FILES = 64
 
 _DEFAULT_IDX_TO_CLASS = {0: "backhand", 1: "forehand", 2: "ready_position", 3: "serve"}
 
+
 class PredictResponse(BaseModel):
     label: str
     confidence: float
@@ -71,7 +72,7 @@ def _load_idx_to_class(model_uri: str, run_id: str, tracking_uri: str) -> dict[i
         source_run_id = None
 
         if model_uri and model_uri.startswith("models:/"):
-            rest = model_uri[len("models:/"):]
+            rest = model_uri[len("models:/") :]
             if "@" in rest:
                 name, alias = rest.split("@", 1)
                 mv = client.get_model_version_by_alias(name, alias)
@@ -92,9 +93,7 @@ def _load_idx_to_class(model_uri: str, run_id: str, tracking_uri: str) -> dict[i
         logger.warning("Could not load idx_to_class from MLflow artifacts.")
 
     # 3. Fallback
-    logger.warning(
-        "Using default idx_to_class. Set IDX_TO_CLASS env var or ensure model run has labels/idx_to_class.json artifact."
-    )
+    logger.warning("Using default idx_to_class. Set IDX_TO_CLASS env var or ensure model run has labels/idx_to_class.json artifact.")
     return dict(_DEFAULT_IDX_TO_CLASS)
 
 
@@ -166,7 +165,7 @@ def _predict_pil(request: Request, img: Image.Image, top_k: int = 3) -> tuple[in
 
 
 @app.post("/predict", response_model=PredictResponse)
-async def predict(request: Request, file: UploadFile = File(...), top_k: int = 3):
+async def predict(request: Request, file: UploadFile = File(...), top_k: int = 3):  # noqa: B008
     try:
         model = request.app.state.model
         idx_to_class = request.app.state.idx_to_class
@@ -233,7 +232,7 @@ def _predict_batch_pil(request: Request, images: list[Image.Image], top_k: int) 
 
 
 @app.post("/predict_batch", response_model=BatchPredictResponse)
-async def predict_batch(request: Request, files: list[UploadFile] = File(...), top_k: int = 3, strict: bool = False):
+async def predict_batch(request: Request, files: list[UploadFile] = File(...), top_k: int = 3, strict: bool = False):  # noqa: B008
     """
     strict = False: returns error per file and moves on
     strict = True: wrong file -> error
@@ -301,10 +300,10 @@ async def predict_batch(request: Request, files: list[UploadFile] = File(...), t
     except Exception as e:
         logger.exception("Predict Batch failed.")
         raise HTTPException(status_code=500, detail=str(e)) from e
-    
+
 
 @app.post("/explain")
-async def explain(request: Request, file: UploadFile = File(...)):
+async def explain(request: Request, file: UploadFile = File(...)):  # noqa: B008
     raw = await file.read()
 
     if not (file.content_type or "").startswith("image/"):
