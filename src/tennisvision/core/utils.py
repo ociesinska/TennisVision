@@ -11,22 +11,29 @@ import torch
 from PIL import Image
 
 
-def get_device() -> str:
+def get_device(device: str = "auto") -> str:
+    if device not in {"auto", "cpu", "cuda", "mps"}:
+        raise ValueError(f"Unknown device: {device}")
+
+    if device != "auto":
+        return device
+
     if torch.cuda.is_available():
-        device = "cuda"
-    elif torch.backends.mps.is_available():
-        device = "mps"
-    else:
-        device = "cpu"
-    return device
+        return "cuda"
+    if torch.backends.mps.is_available():
+        return "mps"
+    return "cpu"
 
 
-def seed_everything(seed: int = 42) -> None:
+def seed_everything(seed: int = 42, deterministic: bool = False) -> None:
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(seed)
+    if deterministic:
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
     os.environ["PYTHONHASHSEED"] = str(seed)
 
 
@@ -68,4 +75,3 @@ def concat_rgb(a: np.ndarray, b: np.ndarray) -> np.ndarray:
         b = np.array(b_img, dtype=np.uint8)
 
     return np.concatenate([a, b], axis=0)
-

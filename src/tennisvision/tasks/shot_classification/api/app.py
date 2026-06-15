@@ -16,7 +16,7 @@ from pydantic import BaseModel
 
 from tennisvision.core.explainability import gradcam_heatmap, overlay_heatmap, pick_cam_layer, preprocess_PIL
 from tennisvision.core.mlflow_utils import load_model_from_mlflow, setup_mlflow
-from tennisvision.core.utils import concat_rgb, rgb_ndarray_to_png_bytes
+from tennisvision.core.utils import concat_rgb, get_device, rgb_ndarray_to_png_bytes
 from tennisvision.tasks.shot_classification.data import build_preprocess
 
 logger = logging.getLogger(__name__)
@@ -103,7 +103,7 @@ async def lifespan(app: FastAPI):
     tracking_uri = os.getenv("MLFLOW_TRACKING_URI", "http://127.0.0.1:8080")
     setup_mlflow(experiment_name=None, tracking_uri=tracking_uri, set_experiment=False)
 
-    device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
+    device = torch.device(get_device(os.getenv("DEVICE", "auto")))
     model_uri_env = os.getenv("MODEL_URI", "models:/TennisVision@champion")
     run_id = os.getenv("RUN_ID", "")
     model_name = os.getenv("MODEL_NAME", "mobilenet_v3_large")

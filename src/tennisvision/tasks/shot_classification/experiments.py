@@ -98,7 +98,7 @@ def run_experiment(
 ) -> dict[str, Any]:
 
     seed_everything(cfg.seed)
-    device = get_device()
+    device = get_device(cfg.device)
 
     has_active_run = mlflow.active_run() is not None
 
