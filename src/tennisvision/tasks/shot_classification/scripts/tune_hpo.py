@@ -96,7 +96,7 @@ def main() -> None:
         num_workers=0,  # on macOS multiprocessing with DataLoader in a loop (like HPO) often hangs.
         pin_memory=True,
         mlflow_experiment_name="TennisVision",
-        enable_explainability=False 
+        enable_explainability=False,
     )
 
     study = optuna.create_study(direction="maximize")
@@ -124,7 +124,7 @@ def main() -> None:
             head_epochs=base_cfg.head_epochs,
             finetune_epochs=base_cfg.finetune_epochs,
             seed=base_cfg.seed,
-            enable_explainability = True
+            enable_explainability=True,
         )
 
         # final run (explainability images are logged to MLflow inside run_experiment)

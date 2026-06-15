@@ -16,13 +16,13 @@ from tennisvision.tasks.shot_classification.data import build_preprocess
 
 
 def main():
-    # TODO: add max pics for explainability 
+    # TODO: add max pics for explainability
     parser = argparse.ArgumentParser(description="Explainability for TennisVision")
 
     model_group = parser.add_mutually_exclusive_group(required=True)
     model_group.add_argument("--model_uri", type=str, help="MLflow model URI (e.g. models:/TennisVision@champion)")
     model_group.add_argument("--run_id", type=str, help="MLflow run ID (e.g. abc123456789)")
-    
+
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--image", type=str, help="Path to a single image file")
     group.add_argument("--input-dir", type=str, help="Path to a directory with images")
@@ -38,8 +38,7 @@ def main():
     mlflow_tracking_uri = os.getenv("MLFLOW_TRACKING_URI", "http://127.0.0.1:8080")
     setup_mlflow(experiment_name="Explainability", tracking_uri=mlflow_tracking_uri, set_experiment=True)
 
-    with mlflow.start_run(run_name =  f"explain-{time.strftime('Y%m%d_%H%M%S')}"):
-
+    with mlflow.start_run(run_name=f"explain-{time.strftime('Y%m%d_%H%M%S')}"):
         if args.model_uri:
             model, model_uri = load_model_from_mlflow(model_uri=args.model_uri, device=device)
         elif args.run_id:
@@ -47,7 +46,7 @@ def main():
 
         model.eval()
         mlflow.log_param("source_model_uri", model_uri)
-        
+
         if args.image:
             image_list = [args.image]
         elif args.input_dir:
@@ -63,11 +62,11 @@ def main():
             client = MlflowClient(tracking_uri=mlflow_tracking_uri)
             idx_to_class_path = client.download_artifacts(args.run_id, "labels/idx_to_class.json")
             with open(idx_to_class_path) as x:
-                idx_to_class =json.load(x)
+                idx_to_class = json.load(x)
                 idx_to_class = {int(k): v for k, v in idx_to_class.items()}
-        else: # TODO: adjust to avoid hardcoding
+        else:  # TODO: adjust to avoid hardcoding
             idx_to_class = {0: "backhand", 1: "forehand", 2: "ready_position", 3: "serve"}
-        
+
         preprocess = build_preprocess()
         model_name = args.model_name
         conv_layer = pick_cam_layer(model=model, model_name=model_name)
@@ -76,8 +75,8 @@ def main():
             image = Image.open(img)
             x = preprocess_PIL(image, preprocess)
             x = x.to(device)
-            pred = model(x) # [B, C]
-            top2_idx = pred.topk(k=2, dim=1).indices # [B, 2]
+            pred = model(x)  # [B, C]
+            top2_idx = pred.topk(k=2, dim=1).indices  # [B, 2]
             pred_idx1 = top2_idx[:, 0]
             pred_idx2 = top2_idx[:, 1]
             pred_class_1 = idx_to_class[pred_idx1.item()]
@@ -91,6 +90,7 @@ def main():
 
             mlflow.log_image(overlay_pred1, f"Grad-CAM/heatmap_pred1_{i}_{pred_class_1}.png")
             mlflow.log_image(overlay_pred2, f"Grad-CAM/heatmap_pred2_{i}_{pred_class_2}.png")
+
 
 if __name__ == "__main__":
     main()

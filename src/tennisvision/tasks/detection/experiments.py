@@ -49,16 +49,14 @@ def run_experiment(cfg: DetectionExperimentConfig):
         mlflow.log_dict(_jsonable(asdict(cfg)), "config.json")
 
         if cfg.backend == "ultralytics":
-            
-            result =  run_ultralytics_experiment(cfg)
+            result = run_ultralytics_experiment(cfg)
 
-            artifacts = save_yolo_artifacts(result['save_dir'])
-            for artifact_group, paths in  artifacts.items():
+            artifacts = save_yolo_artifacts(result["save_dir"])
+            for artifact_group, paths in artifacts.items():
                 for path in paths:
                     mlflow.log_artifact(str(path), artifact_path=artifact_group)
-            
+
             return result
-                
 
         if cfg.backend == "torchvision":
             result = run_torchvision_experiment(cfg)

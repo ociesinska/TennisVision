@@ -212,6 +212,7 @@ def fit(
 
     return hist, explain_images
 
+
 @dataclass
 class Predictions:
     y_true: torch.Tensor | None

@@ -13,33 +13,30 @@ from tennisvision.tasks.shot_classification.data import IMAGENET_MEAN, IMAGENET_
 
 
 def get_last_conv_layer(model: nn.Module) -> nn.Module:
-    #TODO
+    # TODO
     raise NotImplementedError
+
 
 def preprocess_PIL(img: Image.Image, preprocess) -> torch.Tensor:
     return preprocess(img.convert("RGB")).unsqueeze(0)
 
-def gradcam_heatmap(
-        model: nn.Module,
-        x: torch.Tensor,
-        target: int,
-        conv_layer: nn.Module,
-        device: torch.device
-        ) -> np.ndarray:
-        model.eval()
-        model.to(device)
-        x = x.to(device)
-        x.requires_grad_(True)
 
-        cam = LayerGradCam(model, conv_layer)
-        attr = cam.attribute(x, target) # here captum does forward step + backward, calculates grad-cam for class target
-        # attr is [1, 1, h, w] or [1, h, w]
-        heat = LayerAttribution.interpolate(attr, x.shape[-2:]) # adjusting the heatmap to the input size 
-        heat = heat.squeeze().detach().cpu().numpy()
-        heat = np.maximum(heat, 0)
-        heat = heat / (heat.max() + 1e-8)
+def gradcam_heatmap(model: nn.Module, x: torch.Tensor, target: int, conv_layer: nn.Module, device: torch.device) -> np.ndarray:
+    model.eval()
+    model.to(device)
+    x = x.to(device)
+    x.requires_grad_(True)
 
-        return heat
+    cam = LayerGradCam(model, conv_layer)
+    attr = cam.attribute(x, target)  # here captum does forward step + backward, calculates grad-cam for class target
+    # attr is [1, 1, h, w] or [1, h, w]
+    heat = LayerAttribution.interpolate(attr, x.shape[-2:])  # adjusting the heatmap to the input size
+    heat = heat.squeeze().detach().cpu().numpy()
+    heat = np.maximum(heat, 0)
+    heat = heat / (heat.max() + 1e-8)
+
+    return heat
+
 
 def pick_cam_layer(model: nn.Module, model_name: str) -> nn.Module:
     name = model_name.lower()
@@ -53,17 +50,14 @@ def pick_cam_layer(model: nn.Module, model_name: str) -> nn.Module:
         return model.features[-1]
     raise ValueError(f"Unknown model type for model {model_name}")
 
-def overlay_heatmap(img: Image.Image | np.ndarray,
-    heatmap: np.ndarray,
-    alpha: float = 0.4,
-    colormap: int = cv2.COLORMAP_TURBO,
-    is_rgb: bool = True):
+
+def overlay_heatmap(img: Image.Image | np.ndarray, heatmap: np.ndarray, alpha: float = 0.4, colormap: int = cv2.COLORMAP_TURBO, is_rgb: bool = True):
     """
     heatmap: np.ndarray (H,W) float in [0,1]
     img: PIL.Image (RGB) OR np.ndarray (H,W,3) in RGB/BGR (see to_rgb)
 
     Returns: overlay image as np.ndarray (H, W, 3) in RGB by default.
-    
+
     Parameter is_rgb: if False, the input image is in BGR and will be converted to RGB;
     if True, the input image is already in RGB and does not require conversion.
     """
@@ -114,7 +108,7 @@ def explainability_for_training(model, epoch, data_loader, device, *, model_name
         for idx in rand_idx:
             img_tensor, _ = data_loader.dataset[idx]
             x = img_tensor.unsqueeze(0).to(device)
-            
+
             with torch.no_grad():
                 pred = model(x)
             top2_idx = pred.topk(k=2, dim=1).indices

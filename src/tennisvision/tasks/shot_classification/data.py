@@ -12,12 +12,10 @@ from torchvision import transforms as T
 IMAGENET_MEAN = (0.485, 0.456, 0.406)
 IMAGENET_STD = (0.229, 0.224, 0.225)
 
+
 def build_preprocess():
-     return T.Compose([
-          T.Resize((224,224)),
-          T.ToTensor(),
-          T.Normalize(IMAGENET_MEAN, IMAGENET_STD)
-     ])
+    return T.Compose([T.Resize((224, 224)), T.ToTensor(), T.Normalize(IMAGENET_MEAN, IMAGENET_STD)])
+
 
 @dataclass(frozen=True)
 class Split:
@@ -52,6 +50,7 @@ def make_split(image_root: str | Path, seed: int = 42, test_size: float = 0.1, v
         class_to_idx=base.class_to_idx,
         seed=seed,
     )
+
 
 def build_transforms(
     weights=None,

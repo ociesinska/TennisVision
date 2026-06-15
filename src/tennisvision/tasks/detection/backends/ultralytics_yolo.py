@@ -5,7 +5,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import mlflow
-from PIL import Image, ImageDraw, ImageFont
 from ultralytics import YOLO
 
 from tennisvision.core.utils import get_device
@@ -100,35 +99,6 @@ def predict_ultralytics_image(model: Any, image_path: str | Path, cfg: Detection
         detections=detections,
     )
 
-def viz_detected_boxes(
-    detection_result: DetectionResult,
-    save_path: str | Path | None = None,
-):
-
-    if not detection_result.image_path:
-        raise ValueError("DetectionResult.image_path is required to visualize detection result.")
-
-    image = Image.open(detection_result.image_path).convert("RGB")
-    draw = ImageDraw.Draw(image)
-    font = ImageFont.load_default()
-
-    for detection in detection_result.detections:
-        x1, y1, x2, y2 = detection.xyxy
-        label = f"{detection.label} {detection.confidence:.2f}"
-        draw.rectangle((x1, y1, x2, y2), outline=(255, 0, 0), width=3)
-        text_x = x1
-        text_y = max(0, y1 - 12)
-        draw.text((text_x, text_y), label, fill=(255, 0, 0), font=font)
-
-    if save_path is not None:
-        output_path = Path(save_path)
-        if not output_path.suffix:
-            image_name = Path(detection_result.image_path).stem
-            output_path = output_path / f"{image_name}.png"
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        image.save(output_path)
-
-    return image
 
 def save_yolo_artifacts(save_dir: str | Path) -> dict[str, list[Path]]:
     save_dir = Path(save_dir)
@@ -155,13 +125,13 @@ def save_yolo_artifacts(save_dir: str | Path) -> dict[str, list[Path]]:
 
     existing_artifacts: dict[str, list[Path]] = {}
     for artifact_group, paths in artifact_groups.items():
-
         existing_paths = [path for path in paths if path.is_file()]
 
         if existing_paths:
             existing_artifacts[artifact_group] = existing_paths
 
     return existing_artifacts
+
 
 def load_ultralytics_detector_from_mlflow(
     *,
