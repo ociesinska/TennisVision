@@ -166,3 +166,41 @@ def evaluate_ultralytics_detector(model, cfg):
     )
 
     return results
+
+
+def extract_ultralytics_metrics(results) -> dict[str, float]:
+    return {
+        "precision": float(results.box.mp),
+        "recall": float(results.box.mr),
+        "map50": float(results.box.map50),
+        "map75": float(results.box.map75),
+        "map50_95": float(results.box.map),
+        "fitness": float(results.fitness),
+    }
+
+
+def log_ultralytics_eval_artifacts(results):
+
+    save_dir = Path(results.save_dir)
+    allowed_suffixes = {".png", ".jpg", ".jpeg", ".csv", ".txt", ".json"}
+    
+    
+    for path in save_dir.iterdir():
+        if path.is_file() and path.suffix.lower() in allowed_suffixes:
+            mlflow.log_artifact(str(path), artifact_path="ultralytics_eval")
+
+
+def log_ultralytics_eval_to_mlflow(results, cfg, metrics) -> None:
+    mlflow.log_dict(results.results_dict, "evaluation/results_dict.json")
+
+    summary = f"""# Detection Evaluation
+
+        split: {cfg.split}
+        mAP50: {metrics["map50"]:.4f}
+        mAP50-95: {metrics["map50_95"]:.4f}
+        precision: {metrics["precision"]:.4f}
+        recall: {metrics["recall"]:.4f}
+     """
+    
+    mlflow.log_text(summary, "evaluation/summary.md")
+    log_ultralytics_eval_artifacts(results)

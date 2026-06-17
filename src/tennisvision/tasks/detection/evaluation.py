@@ -24,16 +24,6 @@ class DetectionEvaluationConfig:
     device: str = "auto"
 
 
-def extract_ultralytics_metrics(results) -> dict[str, float]:
-    return {
-        "precision": float(results.box.mp),
-        "recall": float(results.box.mr),
-        "map50": float(results.box.map50),
-        "map75": float(results.box.map75),
-        "map50_95": float(results.box.map),
-        "fitness": float(results.fitness),
-    }
-
 
 def evaluate_detector(cfg: DetectionEvaluationConfig):
     model = load_detector(cfg)

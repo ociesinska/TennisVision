@@ -2,15 +2,15 @@ import argparse
 import logging
 from datetime import datetime
 from pathlib import Path
-
+from dataclasses import asdict
 import mlflow
 
 from tennisvision.core.mlflow_utils import _jsonable, setup_mlflow
 from tennisvision.tasks.detection.evaluation import (
     DetectionEvaluationConfig,
-    evaluate_detector,
-    extract_ultralytics_metrics,
+    evaluate_detector
 )
+from tennisvision.tasks.detection.backends.ultralytics_yolo import extract_ultralytics_metrics, log_ultralytics_eval_to_mlflow
 from tennisvision.tasks.detection.inference import get_model_source
 
 logger = logging.getLogger(__name__)
@@ -78,6 +78,8 @@ def main():
         mlflow.set_tag("task", "detection")
         mlflow.set_tag("backend", cfg.backend)
 
+        mlflow.log_dict(_jsonable(asdict(cfg)), "evaluation/config.json")
+
         mlflow.log_params(
             _jsonable(
                 {
@@ -103,8 +105,9 @@ def main():
         if cfg.backend == "ultralytics":
             metrics = extract_ultralytics_metrics(results)
             mlflow.log_metrics(metrics)
+            log_ultralytics_eval_to_mlflow(results, cfg, metrics)
             logger.info(f"Metrics: {metrics}")
-
+        
 
 if __name__ == "__main__":
     main()
