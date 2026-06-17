@@ -20,7 +20,6 @@ logger = logging.getLogger(__name__)
 
 
 def run_ultralytics_experiment(cfg: DetectionExperimentConfig):
-    from ultralytics import YOLO
 
     validate_inputs(cfg.data_config)
 
@@ -54,7 +53,6 @@ def run_ultralytics_experiment(cfg: DetectionExperimentConfig):
 
 
 def load_ultralytics_detector(model_path: str | Path) -> Any:
-    from ultralytics import YOLO
 
     return YOLO(str(model_path))
 
@@ -152,3 +150,19 @@ def load_ultralytics_detector_from_mlflow(
 
     local_path = mlflow.artifacts.download_artifacts(artifact_uri=model_uri)
     return YOLO(local_path)
+
+
+def evaluate_ultralytics_detector(model, cfg):
+    device = get_device(cfg.device)
+
+    results = model.val(
+        data=str(cfg.data_config),
+        split=cfg.split,
+        imgsz=cfg.imgsz,
+        batch=cfg.batch,
+        conf=cfg.confidence,
+        iou=cfg.iou,
+        device=device,
+    )
+
+    return results

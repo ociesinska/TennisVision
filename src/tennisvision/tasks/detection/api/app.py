@@ -100,8 +100,8 @@ def health(request: Request):
 @app.post("/predict", response_model=DetectionResponse)
 async def predict(
     request: Request,
-    file: UploadFile = File(...),
-    confidence: float | None = None,  # noqa: B008
+    file: UploadFile = File(...),  # noqa: B008
+    confidence: float | None = None,
     iou: float | None = None,
 ):
     cfg = request.app.state.cfg
@@ -154,8 +154,8 @@ async def predict(
 @app.post("/predict/image", response_class=StreamingResponse)
 async def predict_image_with_boxes(
     request: Request,
-    file: UploadFile = File(...),
-    confidence: float | None = None,  # noqa: B008
+    file: UploadFile = File(...),  # noqa: B008
+    confidence: float | None = None,
     iou: float | None = None,
 ) -> StreamingResponse:
     cfg = request.app.state.cfg

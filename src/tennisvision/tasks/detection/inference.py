@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Protocol
 
 from tennisvision.tasks.detection.backends.torchvision_detection import (
     load_torchvision_detector,
@@ -13,6 +14,17 @@ from tennisvision.tasks.detection.backends.ultralytics_yolo import (
     predict_ultralytics_image,
 )
 from tennisvision.tasks.detection.types import DetectionResult
+
+
+@dataclass
+class DetectorLoadConfig(Protocol):
+    backend: str
+    model_path: Path
+    model_uri: str | None
+    run_id: str | None
+    model_artifact_path: str
+    tracking_uri: str | None
+    device: str
 
 
 @dataclass

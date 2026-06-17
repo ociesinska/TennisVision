@@ -3,7 +3,7 @@ from pathlib import Path
 
 DATASET_ROOT = Path("data/detection")
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
-SPLITS = ("train", "val")
+SPLITS = ("test",)
 
 
 def main() -> None:

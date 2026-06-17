@@ -4,7 +4,7 @@ from ultralytics import YOLO
 
 DATASET_ROOT = Path("data/detection")
 MODEL_PATH = "yolo11m.pt"
-SPLITS = ("train", "val")
+SPLITS = ("test",)
 
 
 def auto_label_split(model: YOLO, split: str, confidence: float = 0.15, image_size: int = 1280) -> None:

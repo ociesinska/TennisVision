@@ -1,0 +1,110 @@
+import argparse
+import logging
+from datetime import datetime
+from pathlib import Path
+
+import mlflow
+
+from tennisvision.core.mlflow_utils import _jsonable, setup_mlflow
+from tennisvision.tasks.detection.evaluation import (
+    DetectionEvaluationConfig,
+    evaluate_detector,
+    extract_ultralytics_metrics,
+)
+from tennisvision.tasks.detection.inference import get_model_source
+
+logger = logging.getLogger(__name__)
+
+
+def make_run_name(cfg: DetectionEvaluationConfig) -> str:
+    if cfg.run_id:
+        model_name = f"run_{cfg.run_id[:8]}"
+    elif cfg.model_uri:
+        model_name = cfg.model_uri.replace(":/", "_").replace("/", "_").replace(":", "_")
+        model_name = model_name[-60:]
+    else:
+        model_name = cfg.model_path.stem
+
+    return f"eval_{cfg.split}_{model_name}_{datetime.now():%Y%m%d_%H%M%S}"
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Run model evaluation.")
+    parser.add_argument("--data-config", type=Path, default=Path("data/detection/data.yaml"))
+    parser.add_argument("--split", type=str, default="test")
+    parser.add_argument("--model-path", type=Path, default=DetectionEvaluationConfig.model_path)
+    parser.add_argument("--backend", type=str, default="ultralytics", choices=["ultralytics", "torchvision"])
+    parser.add_argument("--imgsz", type=int, default=960)
+    parser.add_argument("--batch", type=int, default=DetectionEvaluationConfig.batch)
+    parser.add_argument("--confidence", type=float, default=0.001)
+    parser.add_argument("--iou", type=float, default=0.7)
+    parser.add_argument("--device", type=str, default="auto")
+    parser.add_argument("--model-uri", type=str, default=None)
+    parser.add_argument("--run-id", type=str, default=None)
+    parser.add_argument(
+        "--model-artifact-path",
+        type=str,
+        default=DetectionEvaluationConfig.model_artifact_path,
+    )
+    parser.add_argument("--tracking-uri", type=str, default="http://127.0.0.1:8080")
+    parser.add_argument("--mlflow-experiment-name", type=str, default="TennisVisionDetectionEvaluation")
+    args = parser.parse_args()
+
+    cfg = DetectionEvaluationConfig(
+        backend=args.backend,
+        data_config=args.data_config,
+        split=args.split,
+        model_path=args.model_path,
+        model_uri=args.model_uri,
+        run_id=args.run_id,
+        model_artifact_path=args.model_artifact_path,
+        tracking_uri=args.tracking_uri,
+        imgsz=args.imgsz,
+        batch=args.batch,
+        confidence=args.confidence,
+        iou=args.iou,
+        device=args.device,
+    )
+
+    setup_mlflow(
+        experiment_name=args.mlflow_experiment_name,
+        tracking_uri=args.tracking_uri,
+        set_experiment=True,
+    )
+
+    run_name = make_run_name(cfg)
+    with mlflow.start_run(run_name=run_name):
+        mlflow.set_tag("run_type", "evaluation")
+        mlflow.set_tag("task", "detection")
+        mlflow.set_tag("backend", cfg.backend)
+
+        mlflow.log_params(
+            _jsonable(
+                {
+                    "data_config": cfg.data_config,
+                    "split": cfg.split,
+                    "model_source": get_model_source(cfg),
+                    "model_path": cfg.model_path,
+                    "model_uri": cfg.model_uri,
+                    "source_run_id": cfg.run_id,
+                    "model_artifact_path": cfg.model_artifact_path,
+                    "imgsz": cfg.imgsz,
+                    "batch": cfg.batch,
+                    "confidence": cfg.confidence,
+                    "iou": cfg.iou,
+                    "device": cfg.device,
+                }
+            )
+        )
+
+        logger.info("Running model evaluation...")
+        results = evaluate_detector(cfg)
+
+        if cfg.backend == "ultralytics":
+            metrics = extract_ultralytics_metrics(results)
+            mlflow.log_metrics(metrics)
+            logger.info(f"Metrics: {metrics}")
+
+
+if __name__ == "__main__":
+    main()

@@ -75,7 +75,7 @@ def main() -> None:
 
     image_stem = args.image.stem
     run_name = f"infer_{image_stem}_{datetime.now():%Y%m%d_%H%M%S}"
-    
+
     with mlflow.start_run(run_name=run_name):
         mlflow.set_tag("run_type", "inference")
         mlflow.set_tag("task", "detection")
