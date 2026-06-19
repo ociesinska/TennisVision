@@ -1,16 +1,17 @@
 import argparse
 import logging
+from dataclasses import asdict
 from datetime import datetime
 from pathlib import Path
-from dataclasses import asdict
+
 import mlflow
 
 from tennisvision.core.mlflow_utils import _jsonable, setup_mlflow
-from tennisvision.tasks.detection.evaluation import (
-    DetectionEvaluationConfig,
-    evaluate_detector
+from tennisvision.tasks.detection.backends.ultralytics_yolo import (
+    extract_ultralytics_metrics,
+    log_ultralytics_eval_to_mlflow,
 )
-from tennisvision.tasks.detection.backends.ultralytics_yolo import extract_ultralytics_metrics, log_ultralytics_eval_to_mlflow
+from tennisvision.tasks.detection.evaluation import DetectionEvaluationConfig, evaluate_detector
 from tennisvision.tasks.detection.inference import get_model_source
 
 logger = logging.getLogger(__name__)
@@ -26,6 +27,19 @@ def make_run_name(cfg: DetectionEvaluationConfig) -> str:
         model_name = cfg.model_path.stem
 
     return f"eval_{cfg.split}_{model_name}_{datetime.now():%Y%m%d_%H%M%S}"
+
+
+def make_model_tag(cfg: DetectionEvaluationConfig, model_tag: str | None) -> str:
+    if model_tag:
+        return model_tag
+
+    if cfg.run_id:
+        return f"run_{cfg.run_id[:8]}"
+
+    if cfg.model_uri:
+        return cfg.model_uri
+
+    return cfg.model_path.stem
 
 
 def main():
@@ -48,6 +62,8 @@ def main():
     )
     parser.add_argument("--tracking-uri", type=str, default="http://127.0.0.1:8080")
     parser.add_argument("--mlflow-experiment-name", type=str, default="TennisVisionDetectionEvaluation")
+    parser.add_argument("--dataset-tag", type=str, default=None)
+    parser.add_argument("--model-tag", type=str, default=None)
     args = parser.parse_args()
 
     cfg = DetectionEvaluationConfig(
@@ -74,30 +90,39 @@ def main():
 
     run_name = make_run_name(cfg)
     with mlflow.start_run(run_name=run_name):
+        model_tag = make_model_tag(cfg, args.model_tag)
+
         mlflow.set_tag("run_type", "evaluation")
         mlflow.set_tag("task", "detection")
         mlflow.set_tag("backend", cfg.backend)
+        mlflow.set_tag("model", model_tag)
+        mlflow.set_tag("split", cfg.split)
+
+        if args.dataset_tag:
+            mlflow.set_tag("dataset", args.dataset_tag)
 
         mlflow.log_dict(_jsonable(asdict(cfg)), "evaluation/config.json")
 
-        mlflow.log_params(
-            _jsonable(
-                {
-                    "data_config": cfg.data_config,
-                    "split": cfg.split,
-                    "model_source": get_model_source(cfg),
-                    "model_path": cfg.model_path,
-                    "model_uri": cfg.model_uri,
-                    "source_run_id": cfg.run_id,
-                    "model_artifact_path": cfg.model_artifact_path,
-                    "imgsz": cfg.imgsz,
-                    "batch": cfg.batch,
-                    "confidence": cfg.confidence,
-                    "iou": cfg.iou,
-                    "device": cfg.device,
-                }
-            )
-        )
+        params = {
+            "data_config": cfg.data_config,
+            "split": cfg.split,
+            "model_source": get_model_source(cfg),
+            "imgsz": cfg.imgsz,
+            "batch": cfg.batch,
+            "confidence": cfg.confidence,
+            "iou": cfg.iou,
+            "device": cfg.device,
+        }
+
+        if cfg.run_id is not None:
+            params["source_run_id"] = cfg.run_id
+            params["model_artifact_path"] = cfg.model_artifact_path
+        elif cfg.model_uri is not None:
+            params["model_uri"] = cfg.model_uri
+        else:
+            params["model_path"] = cfg.model_path
+
+        mlflow.log_params(_jsonable(params))
 
         logger.info("Running model evaluation...")
         results = evaluate_detector(cfg)
@@ -107,7 +132,7 @@ def main():
             mlflow.log_metrics(metrics)
             log_ultralytics_eval_to_mlflow(results, cfg, metrics)
             logger.info(f"Metrics: {metrics}")
-        
+
 
 if __name__ == "__main__":
     main()

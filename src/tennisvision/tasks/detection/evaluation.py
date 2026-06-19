@@ -24,7 +24,6 @@ class DetectionEvaluationConfig:
     device: str = "auto"
 
 
-
 def evaluate_detector(cfg: DetectionEvaluationConfig):
     model = load_detector(cfg)
     if cfg.backend == "ultralytics":

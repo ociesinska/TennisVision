@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import logging
+import os
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import mlflow
-from ultralytics import YOLO
+from ultralytics import YOLO, settings
 
 from tennisvision.core.utils import get_device
 from tennisvision.tasks.detection.data import validate_inputs
@@ -25,20 +26,38 @@ def run_ultralytics_experiment(cfg: DetectionExperimentConfig):
 
     device = get_device(cfg.device)
 
+    previous_mlflow_env = {
+        "MLFLOW_EXPERIMENT_NAME": os.environ.get("MLFLOW_EXPERIMENT_NAME"),
+        "MLFLOW_RUN": os.environ.get("MLFLOW_RUN"),
+        "MLFLOW_KEEP_RUN_ACTIVE": os.environ.get("MLFLOW_KEEP_RUN_ACTIVE"),
+    }
+
+    settings.update({"mlflow": True})
+    os.environ["MLFLOW_EXPERIMENT_NAME"] = cfg.mlflow_experiment_name
+    os.environ["MLFLOW_RUN"] = cfg.run_name
+    os.environ["MLFLOW_KEEP_RUN_ACTIVE"] = "True"
+
     model = YOLO(cfg.model)
 
-    results = model.train(
-        data=str(cfg.data_config),
-        epochs=cfg.epochs,
-        imgsz=cfg.imgsz,
-        batch=cfg.batch,
-        device=device,
-        workers=cfg.workers,
-        project=str(cfg.project_dir),
-        name=cfg.run_name,
-        seed=cfg.seed,
-        deterministic=cfg.deterministic,
-    )
+    try:
+        results = model.train(
+            data=str(cfg.data_config),
+            epochs=cfg.epochs,
+            imgsz=cfg.imgsz,
+            batch=cfg.batch,
+            device=device,
+            workers=cfg.workers,
+            project=str(cfg.project_dir),
+            name=cfg.run_name,
+            seed=cfg.seed,
+            deterministic=cfg.deterministic,
+        )
+    finally:
+        for key, value in previous_mlflow_env.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
 
     logger.info(f"Results saved in: {results.save_dir}.")
 
@@ -183,8 +202,7 @@ def log_ultralytics_eval_artifacts(results):
 
     save_dir = Path(results.save_dir)
     allowed_suffixes = {".png", ".jpg", ".jpeg", ".csv", ".txt", ".json"}
-    
-    
+
     for path in save_dir.iterdir():
         if path.is_file() and path.suffix.lower() in allowed_suffixes:
             mlflow.log_artifact(str(path), artifact_path="ultralytics_eval")
@@ -201,6 +219,6 @@ def log_ultralytics_eval_to_mlflow(results, cfg, metrics) -> None:
         precision: {metrics["precision"]:.4f}
         recall: {metrics["recall"]:.4f}
      """
-    
+
     mlflow.log_text(summary, "evaluation/summary.md")
     log_ultralytics_eval_artifacts(results)
