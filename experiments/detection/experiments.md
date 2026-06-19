@@ -35,15 +35,13 @@
 
 | Image | Split | Model | Problem | Likely Cause | Next Action |
 | --- | --- | --- | --- | --- | --- |
-| data/images_to_improve_player_detection/detected/img_imp1_det.png | val / improvement set | yolo11s_img1280_ep30 | Ball kids / staff near the back of the court are detected as `player` together with the real player. | Current dataset has too few hard negatives with non-player people on court; visually, ball kids and referees look similar to distant players. | Add more hard negative frames from match videos and annotate only actual players; keep ball kids, referees, and staff unlabelled unless moving to a multi-class setup. |
+| experiments/detection/assets/img_imp1_det.png | val / improvement set | yolo11s_img1280_ep30 | Ball kids / staff near the back of the court are detected as `player` together with the real player. | Current dataset has too few hard negatives with non-player people on court; visually, ball kids and referees look similar to distant players. | Add more hard negative frames from match videos and annotate only actual players; keep ball kids, referees, and staff unlabelled unless moving to a multi-class setup. |
 
 ### Ball Kids / Staff False Positives
 
-<p>
-  <img src="../../data/images_to_improve_player_detection/detected/img_imp1_det.png" alt="False positives on ball kids and staff - example 1" width="32%">
-  <img src="../../data/images_to_improve_player_detection/detected/img_imp2_det.png" alt="False positives on ball kids and staff - example 2" width="32%">
-  <img src="../../data/images_to_improve_player_detection/detected/img_imp3_det.png" alt="False positives on ball kids and staff - example 3" width="32%">
-</p>
+| Example 1 | Example 2 | Example 3 |
+| --- | --- | --- |
+| <img src="assets/img_imp1_det.png" alt="False positives on ball kids and staff - example 1" width="260"> | <img src="assets/img_imp2_det.png" alt="False positives on ball kids and staff - example 2" width="260"> | <img src="assets/img_imp3_det.png" alt="False positives on ball kids and staff - example 3" width="260"> |
 
 These examples show a repeated failure mode: ball kids / staff visible on or near the court are detected as `player`. The next dataset iteration should include more hard negative frames from match videos, with annotations kept only on actual players.
 
