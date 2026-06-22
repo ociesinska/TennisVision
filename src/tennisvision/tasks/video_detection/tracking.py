@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from importlib.resources import files
 from pathlib import Path
 
 import cv2
@@ -6,6 +7,9 @@ import cv2
 from tennisvision.tasks.detection.inference import load_detector
 from tennisvision.tasks.video_detection.backends.ultralytics_video import track_ultralytics_video
 from tennisvision.tasks.video_detection.types import VideoTrackingResult
+
+
+DEFAULT_TRACKER_CONFIG = str(files("tennisvision.tasks.detection.configs.tracking").joinpath("bytetrack_tennis.yaml"))
 
 
 @dataclass
@@ -22,7 +26,7 @@ class VideoTrackingConfig:
     iou: float = 0.7
     device: str = "auto"
 
-    tracker: str = "bytetrack.yaml"
+    tracker: str = DEFAULT_TRACKER_CONFIG
     save_video: bool = True
     output_dir: Path = Path("data/artifacts/video_detection")
     run_name: str = "video_tracking"

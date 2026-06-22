@@ -4,6 +4,7 @@ TennisVision is a modular computer vision project for tennis analytics. It curre
 
 - shot classification
 - player/object detection
+- video player tracking
 
 The project uses a `src/` layout, MLflow for experiment tracking, and FastAPI for serving task-specific inference APIs.
 
@@ -139,6 +140,34 @@ uv run python -m tennisvision.tasks.detection.scripts.infer \
   --visualize true
 ```
 
+## Video Tracking CLI
+
+Track players in a video with a detection model stored in MLflow:
+
+```bash
+uv run python -m tennisvision.tasks.video_detection.scripts.track_video \
+  --video data/videos/doubles1.mp4 \
+  --run-id <run_id> \
+  --model-artifact-path weights/best.pt \
+  --imgsz 1280 \
+  --confidence 0.25 \
+  --tracker bytetrack.yaml
+```
+
+The script writes local outputs to:
+
+```text
+data/artifacts/video_detection/<run_name>/
+```
+
+Typical outputs include:
+
+- tracked video (`.mp4`)
+- `tracks.json`
+- sample frames for quick inspection
+
+The same outputs are logged to the `Player Video Tracking` MLflow experiment. Large videos should usually stay as local/MLflow artifacts rather than committed to git; use small screenshots or short GIFs in documentation when a visual preview is needed.
+
 ## Project Structure
 
 ```text
@@ -160,6 +189,11 @@ src/tennisvision/
     │   ├── inference.py
     │   ├── types.py
     │   └── visualization.py
+    ├── video_detection/
+    │   ├── backends/
+    │   ├── scripts/
+    │   ├── tracking.py
+    │   └── types.py
     └── shot_classification/
         ├── api/
         ├── scripts/

@@ -27,7 +27,7 @@ def main():
     parser.add_argument("--confidence", type=float, default=0.25)
     parser.add_argument("--iou", type=float, default=0.7)
     parser.add_argument("--device", type=str, default="auto")
-    parser.add_argument("--tracker", type=str, default="bytetrack.yaml")
+    parser.add_argument("--tracker", type=str, default=VideoTrackingConfig.tracker)
     parser.add_argument("--save-video", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--output-dir", type=Path, default=Path("data/artifacts/video_detection"))
     args = parser.parse_args()
