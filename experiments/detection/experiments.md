@@ -44,24 +44,28 @@
 | yolo11s_img1280_ep30 | 50bbeedc56394af7b96c42947f15d5f7 | 82950eb7b17d4507b12dad5f59ed746a | mAP75: 0.8249, fitness: 0.7443|
 | yolo11n_img1280_ep30 | c8e926040e404eb09d1b4755ad1ca90c | 3aa2712a9266435fbfbde6df76ad6e98 | mAP75: 0.7074, fitness: 0.6589|
 | yolo11s_img960_ep50 | cf240eb183af4d28b7595b0589f088a8 | 75e2a4bca11248c789851ecb4bde7f21 | mAP75: 0.8086, fitness: 0.7233|
-| yolo11s_img1280_ep30_playersv2 | 3aa861f3fe824d65a6ba4b996ac66318 | 12ef4da34a98484d86a7107782cce531 | mAP75: 0.7466, fitness: 0.7203, evaluated from `weights/best.pt` |
-| yolo11s_img1280_ep50_playersv2 | d21d335020d14f4498d5388aebebd03b | f0f3f35d6d8544a983a6922816c6dc75 | mAP75: 0.7608, fitness: 0.7208, evaluated from `weights/best.pt` |
+| yolo11s_img1280_ep30_playersv2 | 3aa861f3fe824d65a6ba4b996ac66318 | 12ef4da34a98484d86a7107782cce531 | mAP75: 0.7466, fitness: 0.7203|
+| yolo11s_img1280_ep50_playersv2 | d21d335020d14f4498d5388aebebd03b | f0f3f35d6d8544a983a6922816c6dc75 | mAP75: 0.7608, fitness: 0.7208 |
 
 ## Hard Examples
 
 | Image | Split | Model | Problem | Likely Cause | Next Action |
 | --- | --- | --- | --- | --- | --- |
-| experiments/detection/assets/img_imp1_det.png | val / improvement set | yolo11s_img1280_ep30 | Ball kids / staff near the back of the court are detected as `player` together with the real player. | Current dataset has too few hard negatives with non-player people on court; visually, ball kids and referees look similar to distant players. | Add more hard negative frames from match videos and annotate only actual players; keep ball kids, referees, and staff unlabelled unless moving to a multi-class setup. |
+| local improvement images | val / improvement set | yolo11s_img1280_ep30 | Ball kids / staff near the back of the court are detected as `player` together with the real player. | Current dataset has too few hard negatives with non-player people on court; visually, ball kids and referees look similar to distant players. | Add more hard negative frames from match videos and annotate only actual players; keep ball kids, referees, and staff unlabelled unless moving to a multi-class setup. |
 
 ### Ball Kids / Staff False Positives
 
-| Example 1 | Example 2 | Example 3 |
-| --- | --- | --- |
-| <img src="assets/img_imp1_det.png" alt="False positives on ball kids and staff - example 1" width="260"> | <img src="assets/img_imp2_det.png" alt="False positives on ball kids and staff - example 2" width="260"> | <img src="assets/img_imp3_det.png" alt="False positives on ball kids and staff - example 3" width="260"> |
-
-These examples show a repeated failure mode: ball kids / staff visible on or near the court are detected as `player`. The next dataset iteration should include more hard negative frames from match videos, with annotations kept only on actual players.
+Observed failure mode: ball kids / staff visible on or near the court are detected as `player`. This is especially visible for small people close to the back wall, side benches, umpire chair, or court edges. The next dataset iteration should include more hard negative frames from match videos, with annotations kept only on actual players.
 
 Important dataset balance: adding many ball kid / staff negatives may make the model too restrictive around court edges and background areas. The next dataset version should also add hard positive examples where real players are close to the net, close to court boundaries, partially outside the main court area, or visually similar to staff positions. This should help the model learn the difference between role/context and actual player appearance instead of simply suppressing people near the edges.
+
+Local examples to revisit:
+
+| Local file | Reason | Expected behavior |
+| --- | --- | --- |
+| `data/images_to_improve_player_detection/raw/img_imp1.png` | ball kids / staff behind the court | detect actual players only |
+| `data/images_to_improve_player_detection/raw/img_imp2.png` | staff visible near court area | ignore non-player people |
+| `data/images_to_improve_player_detection/raw/img_imp3.png` | ball kids visible on or near court | ignore non-player people |
 
 ## Repro Commands
 
@@ -97,27 +101,3 @@ uv run python -m tennisvision.tasks.detection.scripts.infer \
   --model-artifact-path weights/best.pt \
   --visualize true
 ```
-
-## Manual Inspection Set
-
-| Image | Reason | Expected behavior | Observed behavior | Action |
-| --- | --- | --- | --- | --- |
-|  | far player | detects player with tight box |  |  |
-|  | multiple people | detects tennis player, ignores audience |  |  |
-|  | partial occlusion | detects visible player body |  |  |
-|  | shadow / low contrast | box stays on player, not shadow |  |  |
-
-## Error Cases
-
-| Type | Examples | Likely cause | Next action |
-| --- | --- | --- | --- |
-| False positive on audience |  | background people look like player | add negatives / more court context |
-| Missed far player |  | small object | higher imgsz / more examples |
-| Box too large |  | player + shadow / court area | improve labels / augmentations |
-| Wrong person detected |  | ball boy / referee | add hard negatives |
-
-## Notes
-
-- Evaluation confidence should usually stay low, for example `0.001`, because mAP is computed across a precision-recall curve.
-- API/inference confidence can be higher, for example `0.25`, `0.35`, or `0.5`, depending on visual behavior.
-- Prefer comparing models on the same dataset version and split.
