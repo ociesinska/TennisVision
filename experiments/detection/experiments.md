@@ -12,14 +12,19 @@
 | Field | Value |
 | --- | --- |
 | Model | yolo11s.pt |
-| Dataset | detection_cvat_v1 |
-| Training run | 50bbeedc56394af7b96c42947f15d5f7 |
-| Evaluation run | 82950eb7b17d4507b12dad5f59ed746a |
-| mAP50 | 0.9240 |
-| mAP50-95 | 0.7443 |
-| Precision | 0.8922 |
-| Recall | 0.8778 |
-| Notes | Current best completed detection baseline: yolo11s at imgsz 1280. |
+| Run name | yolo11s_img1280_ep50_playersv2 |
+| Dataset | detection_cvat_v1_updated |
+| Training run | d21d335020d14f4498d5388aebebd03b |
+| Evaluation run | f0f3f35d6d8544a983a6922816c6dc75 |
+| mAP50 | 0.9427 |
+| mAP50-95 | 0.7208 |
+| Precision | 0.9421 |
+| Recall | 0.8625 |
+| Notes | Current practical baseline: selected from the updated dataset iteration because it includes harder ball kid / staff cases. |
+
+The previous `yolo11s_img1280_ep30` model still has the highest mAP50-95, but it was trained on the earlier dataset version. The current baseline is selected from the updated dataset iteration because it better reflects the target failure cases observed during video tracking and manual inspection.
+
+The current detector is accepted as a practical baseline, not as a final detector. Further detector improvements will be driven by observed video-level failure cases rather than isolated metric optimization.
 
 ## Experiment Table
 
@@ -32,6 +37,7 @@
 | yolo11n_img1280_ep30 | yolo11n.pt | 1280 | 30 | 2 | 0.8979 | 0.6589 | 0.8623 | 0.8542 | Higher image size hurt 11n; the smallest model likely cannot use the extra detail effectively. |
 | yolo11s_img960_ep50 | yolo11s.pt | 960 | 50 | 4 | 0.9124 | 0.7233 | 0.9185 | 0.8543 | Extra epochs at 960 did not beat 11s at 1280. |
 | yolo11s_img1280_ep30_playersv2 | yolo11s.pt | 1280 | 30 | 2 | 0.9349 | 0.7203 | 0.9398 | 0.8561 | Updated train/val data improves mAP50 and precision, but lowers mAP50-95 and recall; needs hard-example visual regression check. |
+| yolo11s_img1280_ep40_playersv2 | yolo11s.pt | 1280 | 40 | 2 | 0.9243 | 0.7162 | 0.8973 | 0.8788 | Intermediate training length improves recall, but does not beat the ep30/ep50 updated-data runs on mAP50 or precision. |
 | yolo11s_img1280_ep50_playersv2 | yolo11s.pt | 1280 | 50 | 2 | 0.9427 | 0.7208 | 0.9421 | 0.8625 | Longer training on updated data improves mAP50/precision slightly, but still does not recover baseline mAP50-95. |
 
 ## Run IDs
@@ -45,6 +51,7 @@
 | yolo11n_img1280_ep30 | c8e926040e404eb09d1b4755ad1ca90c | 3aa2712a9266435fbfbde6df76ad6e98 | mAP75: 0.7074, fitness: 0.6589|
 | yolo11s_img960_ep50 | cf240eb183af4d28b7595b0589f088a8 | 75e2a4bca11248c789851ecb4bde7f21 | mAP75: 0.8086, fitness: 0.7233|
 | yolo11s_img1280_ep30_playersv2 | 3aa861f3fe824d65a6ba4b996ac66318 | 12ef4da34a98484d86a7107782cce531 | mAP75: 0.7466, fitness: 0.7203|
+| yolo11s_img1280_ep40_playersv2 | c5bd48422ecb4955b882b9aad04ac553 | 8cba71d067d542acaa374aa09ba6b3db | mAP75: 0.7776, fitness: 0.7162 |
 | yolo11s_img1280_ep50_playersv2 | d21d335020d14f4498d5388aebebd03b | f0f3f35d6d8544a983a6922816c6dc75 | mAP75: 0.7608, fitness: 0.7208 |
 
 ## Hard Examples
