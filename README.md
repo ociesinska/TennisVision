@@ -150,8 +150,7 @@ uv run python -m tennisvision.tasks.video_detection.scripts.track_video \
   --run-id <run_id> \
   --model-artifact-path weights/best.pt \
   --imgsz 1280 \
-  --confidence 0.25 \
-  --tracker bytetrack.yaml
+  --confidence 0.5
 ```
 
 The script writes local outputs to:

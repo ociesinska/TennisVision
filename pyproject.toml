@@ -54,7 +54,7 @@ package-dir = {"" = "src"}
 where = ["src"]
 
 [tool.setuptools.package-data]
-"tennisvision.tasks.detection.configs.tracking" = ["*.yaml"]
+"tennisvision.tasks.video_detection.configs.tracking" = ["*.yaml"]
 
 [tool.ruff]
 line-length = 150

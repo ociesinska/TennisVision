@@ -8,8 +8,7 @@ from tennisvision.tasks.detection.inference import load_detector
 from tennisvision.tasks.video_detection.backends.ultralytics_video import track_ultralytics_video
 from tennisvision.tasks.video_detection.types import VideoTrackingResult
 
-
-DEFAULT_TRACKER_CONFIG = str(files("tennisvision.tasks.detection.configs.tracking").joinpath("bytetrack_tennis.yaml"))
+DEFAULT_TRACKER_CONFIG = str(files("tennisvision.tasks.video_detection.configs.tracking").joinpath("bytetrack_tennis.yaml"))
 
 
 @dataclass

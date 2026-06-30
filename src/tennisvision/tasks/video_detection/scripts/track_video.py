@@ -7,7 +7,13 @@ from pathlib import Path
 import mlflow
 
 from tennisvision.core.mlflow_utils import setup_mlflow
-from tennisvision.tasks.video_detection.tracking import VideoTrackingConfig, compute_tracking_summary, save_sample_frames, track_video
+from tennisvision.tasks.video_detection.tracking import (
+    VideoTrackingConfig,
+    compute_tracking_stats,
+    compute_tracking_summary,
+    save_sample_frames,
+    track_video,
+)
 
 
 def main():
@@ -81,7 +87,9 @@ def main():
                 mlflow.log_artifact(str(frame_path), artifact_path="sample_frames")
 
         tracking_summary = compute_tracking_summary(result)
+        tracking_stats = compute_tracking_stats(result)
         mlflow.log_dict(tracking_summary, "tracking/summary.json")
+        mlflow.log_dict(tracking_stats, "tracking/stats.json")
         mlflow.log_metrics(tracking_summary)
 
 
