@@ -85,7 +85,7 @@ export DETECTION_MODEL_URI="runs:/<run_id>/models/best.pt"
 The default artifact path for `DETECTION_RUN_ID` is:
 
 ```bash
-export DETECTION_MODEL_ARTIFACT_PATH="models/best.pt"
+export DETECTION_MODEL_ARTIFACT_PATH="weights/best.pt"
 ```
 
 For local development, leave `DETECTION_MODEL_URI` and `DETECTION_RUN_ID` empty and set:
@@ -153,6 +153,12 @@ uv run python -m tennisvision.tasks.video_detection.scripts.track_video \
   --confidence 0.5
 ```
 
+The default tracker config is the project-specific ByteTrack config:
+
+```text
+src/tennisvision/tasks/video_detection/configs/tracking/bytetrack_tennis.yaml
+```
+
 The script writes local outputs to:
 
 ```text
@@ -166,6 +172,42 @@ Typical outputs include:
 - sample frames for quick inspection
 
 The same outputs are logged to the `Player Video Tracking` MLflow experiment. Large videos should usually stay as local/MLflow artifacts rather than committed to git; use small screenshots or short GIFs in documentation when a visual preview is needed.
+
+### Video Tracking Postprocessing
+
+Postprocess existing `tracks.json` files to clean short tracks, merge duplicate IDs, stitch re-entry fragments, optionally select active players, and render a new annotated video.
+
+Use the original raw video as `--video`. Passing an already annotated tracking output will draw labels on top of existing labels.
+
+Recommended singles command:
+
+```bash
+uv run python -m tennisvision.tasks.video_detection.scripts.postprocess_tracks \
+  --tracks data/artifacts/video_detection/<tracking_run>/tracks.json \
+  --video data/public/videos/raw/<video_name>.mp4 \
+  --min-duplicate-overlap-frames 5 \
+  --min-duplicate-iou 0.5 \
+  --max-stitch-frame-gap 180 \
+  --max-stitch-gap-ratio 0.25 \
+  --max-stitch-center-distance 700 \
+  --max-stitch-center-distance-ratio 0.35 \
+  --max-tracks 2
+```
+
+For doubles, use:
+
+```bash
+--max-tracks 4
+```
+
+Postprocessing writes and logs:
+
+- `tracks_postprocessed.json`
+- `postprocessing_info.json`
+- `summary_postprocessed.json`
+- `video_postprocessed.mp4`
+
+Known limitation: postprocessing can preserve identity after a player is detected again, but it does not create boxes for frames where the detector missed a heavily clipped or out-of-frame player.
 
 ## Project Structure
 
@@ -190,9 +232,12 @@ src/tennisvision/
     │   └── visualization.py
     ├── video_detection/
     │   ├── backends/
+    │   ├── configs/
     │   ├── scripts/
+    │   ├── postprocessing.py
     │   ├── tracking.py
-    │   └── types.py
+    │   ├── types.py
+    │   └── visualization.py
     └── shot_classification/
         ├── api/
         ├── scripts/
