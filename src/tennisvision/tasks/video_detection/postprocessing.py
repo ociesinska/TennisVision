@@ -17,10 +17,13 @@ class TrackPostProcessingConfig:
     max_stitch_center_distance: float = 80.0
     max_stitch_center_distance_ratio: float = 0.05
     max_stitch_area_ratio: float = 2.0
+    min_duplicate_overlap_frames: int = 5
+    min_duplicate_iou: float = 0.5
     max_tracks: int | None = None
 
 
 def compute_tracking_stats(result: VideoTrackingResult) -> dict[int, dict[str, int | float]]:
+    """Compute per-track summary statistics used by later cleanup steps."""
 
     tracking_stats: dict[int, dict[str, int | float]] = {}
 
@@ -87,6 +90,7 @@ def compute_tracking_stats(result: VideoTrackingResult) -> dict[int, dict[str, i
 def filter_short_tracks(
     result: VideoTrackingResult, stats: dict[int, dict[str, int | float]], cfg: TrackPostProcessingConfig
 ) -> tuple[VideoTrackingResult, dict]:
+    """Remove very short tracks that are likely unstable false positives."""
 
     if not result.detections:
         return result, {}
@@ -121,6 +125,7 @@ def filter_short_tracks(
 
 
 def stitch_tracks(result: VideoTrackingResult, stats: dict[int, dict[str, int | float]], cfg: TrackPostProcessingConfig) -> dict[int, int]:
+    """Find adjacent track fragments that likely belong to the same object."""
 
     if not result.detections or not stats:
         return {}
@@ -172,6 +177,7 @@ def stitch_tracks(result: VideoTrackingResult, stats: dict[int, dict[str, int | 
 
 
 def apply_track_stitching(result: VideoTrackingResult, mapping: dict[int, int]) -> VideoTrackingResult:
+    """Rewrite track IDs according to a new_track_id -> kept_track_id mapping."""
 
     detections_with_stitched_tracks = []
 
@@ -203,6 +209,7 @@ def apply_track_stitching(result: VideoTrackingResult, mapping: dict[int, int]) 
 
 
 def deduplicate_track_frame_detections(result: VideoTrackingResult) -> VideoTrackingResult:
+    """Keep one highest-confidence detection for each frame and track ID."""
 
     best_detections = {}
 
@@ -224,7 +231,168 @@ def deduplicate_track_frame_detections(result: VideoTrackingResult) -> VideoTrac
     )
 
 
+def group_detections_by_track_and_frame(
+    result: VideoTrackingResult,
+) -> dict[int, dict[int, list[VideoTrackDetection]]]:
+    """Index detections by track ID and frame ID for fast overlap checks."""
+
+    grouped: dict[int, dict[int, list[VideoTrackDetection]]] = {}
+
+    for detection in result.detections:
+        if detection.track_id is None:
+            continue
+
+        grouped.setdefault(detection.track_id, {})
+        grouped[detection.track_id].setdefault(detection.frame_id, [])
+        grouped[detection.track_id][detection.frame_id].append(detection)
+
+    return grouped
+
+
+def box_iou(
+    box_a: tuple[float, float, float, float],
+    box_b: tuple[float, float, float, float],
+) -> float:
+    """Compute intersection-over-union between two xyxy bounding boxes."""
+
+    ax1, ay1, ax2, ay2 = box_a
+    bx1, by1, bx2, by2 = box_b
+
+    inter_x1 = max(ax1, bx1)
+    inter_y1 = max(ay1, by1)
+    inter_x2 = min(ax2, bx2)
+    inter_y2 = min(ay2, by2)
+
+    inter_w = max(0.0, inter_x2 - inter_x1)
+    inter_h = max(0.0, inter_y2 - inter_y1)
+    inter_area = inter_w * inter_h
+
+    area_a = max(0.0, ax2 - ax1) * max(0.0, ay2 - ay1)
+    area_b = max(0.0, bx2 - bx1) * max(0.0, by2 - by1)
+
+    union = area_a + area_b - inter_area
+
+    if union <= 0:
+        return 0.0
+
+    return inter_area / union
+
+
+def merge_overlapping_duplicate_tracks(
+    result: VideoTrackingResult,
+    stats: dict[int, dict[str, int | float]],
+    cfg: TrackPostProcessingConfig,
+) -> dict[int, int]:
+    """Find track IDs that overlap in time and likely describe the same object."""
+
+    grouped = group_detections_by_track_and_frame(result)
+    mapping: dict[int, int] = {}
+
+    track_ids = list(grouped.keys())
+
+    for i, track_a in enumerate(track_ids):
+        for track_b in track_ids[i + 1 :]:
+            frames_a = set(grouped[track_a].keys())
+            frames_b = set(grouped[track_b].keys())
+            common_frames = sorted(frames_a & frames_b)
+
+            if len(common_frames) < cfg.min_duplicate_overlap_frames:
+                continue
+
+            ious = []
+
+            for frame_id in common_frames:
+                det_a = max(grouped[track_a][frame_id], key=lambda d: d.confidence)
+                det_b = max(grouped[track_b][frame_id], key=lambda d: d.confidence)
+
+                ious.append(box_iou(det_a.xyxy, det_b.xyxy))
+
+            mean_iou = sum(ious) / len(ious)
+
+            if mean_iou < cfg.min_duplicate_iou:
+                continue
+
+            if stats[track_a]["count"] >= stats[track_b]["count"]:
+                keep_track = track_a
+                merge_track = track_b
+            else:
+                keep_track = track_b
+                merge_track = track_a
+
+            mapping[merge_track] = keep_track
+
+    return mapping
+
+
+def compute_active_track_scores(
+    result: VideoTrackingResult,
+    stats: dict[int, dict[str, int | float]],
+) -> dict[int, float]:
+    """Rank tracks by how likely they are to be active match players."""
+
+    image_diag = (result.width**2 + result.height**2) ** 0.5
+    image_area = result.width * result.height
+
+    scores = {}
+
+    for track_id, track_stats in stats.items():
+        presence_ratio = track_stats["presence_ratio"]
+        mean_conf = track_stats["mean_conf"]
+        path_distance_ratio = track_stats["total_path_distance"] / image_diag
+        mean_box_area_ratio = track_stats["mean_box_area"] / image_area
+
+        scores[track_id] = (
+            2.0 * presence_ratio
+            + 1.0 * mean_conf
+            + 3.0 * path_distance_ratio
+            + 1.0 * mean_box_area_ratio
+        )
+
+    return scores
+
+
+def select_active_tracks(
+    result: VideoTrackingResult,
+    stats: dict[int, dict[str, int | float]],
+    cfg: TrackPostProcessingConfig,
+) -> tuple[VideoTrackingResult, dict]:
+    """Keep only the top-scoring active tracks when max_tracks is configured."""
+
+    scores = compute_active_track_scores(result, stats)
+
+    if cfg.max_tracks is None:
+        return result, {
+            "active_track_scores": scores,
+            "selected_track_ids": None,
+            "dropped_track_ids": [],
+        }
+
+    tracks_sorted = sorted(scores, key=scores.get, reverse=True)
+    selected_track_ids = set(tracks_sorted[: cfg.max_tracks])
+
+    selected_detections = [
+        detection
+        for detection in result.detections
+        if detection.track_id in selected_track_ids
+    ]
+
+    dropped_track_ids = sorted(set(scores) - selected_track_ids)
+
+    return VideoTrackingResult(
+        video_path=result.video_path,
+        width=result.width,
+        height=result.height,
+        fps=result.fps,
+        detections=selected_detections,
+    ), {
+        "active_track_scores": scores,
+        "selected_track_ids": sorted(selected_track_ids),
+        "dropped_track_ids": dropped_track_ids,
+    }
+
+
 def postprocess_tracking_result(result: VideoTrackingResult, cfg: TrackPostProcessingConfig) -> tuple[VideoTrackingResult, dict]:
+    """Run the first-pass cleanup pipeline for video tracking results."""
 
     raw_stats = compute_tracking_stats(result)
 
@@ -232,19 +400,33 @@ def postprocess_tracking_result(result: VideoTrackingResult, cfg: TrackPostProce
 
     filtered_stats = compute_tracking_stats(filtered_result)
 
-    stitch_mapping = stitch_tracks(filtered_result, filtered_stats, cfg)
+    overlap_mapping = merge_overlapping_duplicate_tracks(filtered_result, filtered_stats, cfg)
+    overlap_merged_result = apply_track_stitching(filtered_result, overlap_mapping)
+    overlap_deduplicated_result = deduplicate_track_frame_detections(overlap_merged_result)
+    overlap_merged_stats = compute_tracking_stats(overlap_deduplicated_result)
 
-    stitched_result = apply_track_stitching(filtered_result, stitch_mapping)
+    stitch_mapping = stitch_tracks(overlap_deduplicated_result, overlap_merged_stats, cfg)
+    stitched_result = apply_track_stitching(overlap_deduplicated_result, stitch_mapping)
 
     deduplicated_result = deduplicate_track_frame_detections(stitched_result)
 
-    final_stats = compute_tracking_stats(deduplicated_result)
+    stats_before_active_selection = compute_tracking_stats(deduplicated_result)
+
+    active_result, active_selection_info = select_active_tracks(
+        deduplicated_result,
+        stats_before_active_selection,
+        cfg,
+    )
+
+    final_stats = compute_tracking_stats(active_result)
 
     postprocessing_info = {
         "raw_stats": raw_stats,
         "filtering": filtering_info,
+        "overlap_mapping": overlap_mapping,
         "stitching_mapping": stitch_mapping,
+        "active_selection": active_selection_info,
         "final_stats": final_stats,
     }
 
-    return deduplicated_result, postprocessing_info
+    return active_result, postprocessing_info

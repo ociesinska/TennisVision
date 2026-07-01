@@ -76,12 +76,74 @@ The first postprocessing iteration adds a conservative pipeline focused on clean
 
 This iteration intentionally does not yet solve all identity problems. It is a first cleanup pass, not a full player-selection system.
 
+## Postprocessing Iteration 2
+
+The second postprocessing iteration adds overlap-based duplicate track merging. This targets cases where two track IDs exist at the same time and describe the same player, rather than cases where one track ends and another starts later.
+
+Added steps:
+
+1. Group detections by `track_id` and `frame_id`.
+2. Compare pairs of tracks that overlap in time.
+3. Compute box IoU on shared frames.
+4. Merge tracks when they overlap for enough frames and have sufficiently high mean IoU.
+5. Deduplicate detections again after merging to keep one box per `(frame_id, track_id)`.
+
+On `video6`, this helped with the observed identity-mixing issue where `player 1` was previously confused with `player 4`. After adding overlap-based duplicate merging, this specific ID conflict was no longer visible in the postprocessed output.
+
+This does not solve every remaining issue. In the same set of qualitative checks, a person on the right side of the frame was still detected and tracked as `player`, even though they were not an active player and barely moved. This is not an overlap-duplicate problem; it requires an additional active-player selection step.
+
+## Postprocessing Iteration 3
+
+The third postprocessing iteration adds active-player scoring and optional `max_tracks` filtering. The goal is to keep the most relevant match players from all valid tennis-player detections returned by the detector/tracker.
+
+Added steps:
+
+1. Compute an active-player score per track using:
+   - `presence_ratio`
+   - `mean_conf`
+   - normalized path distance
+   - normalized box area
+
+2. Add optional `max_tracks` filtering:
+   - singles clips can be evaluated with `--max-tracks 2`;
+   - doubles clips can be evaluated with `--max-tracks 4`;
+   - when `max_tracks` is not provided, scores are still logged for diagnosis but no active-player filtering is applied.
+
+3. Log postprocessing summary:
+   - `summary_postprocessed.json`
+   - `postprocessing_info.json`
+   - MLflow metrics matching the original video tracking summary.
+
+This helped remove inactive or irrelevant player-like tracks in several clips. However, a global top-N ranking can fail when the same real player is split into multiple track IDs before active selection. In that case, top-2 can select two fragments of the same player and remove the opponent. This was observed on `video6` before stitching parameters were relaxed.
+
+To address this, the stitching configuration was made tunable from the CLI:
+
+- `--max-stitch-frame-gap`
+- `--max-stitch-gap-ratio`
+- `--max-stitch-center-distance`
+- `--max-stitch-center-distance-ratio`
+- `--max-stitch-overlap-ratio`
+
+Using a more permissive stitching setup fixed the re-entry identity issue on `video2` and `video6`:
+
+```bash
+--max-stitch-frame-gap 180
+--max-stitch-gap-ratio 0.25
+--max-stitch-center-distance 700
+--max-stitch-center-distance-ratio 0.35
+```
+
+With these settings, players that temporarily disappeared from the frame and were later re-detected with a new tracker ID were stitched back to the original identity. This preserved identity continuity after re-entry and made `--max-tracks 2` safer for those clips.
+
+There is still a separate detector/input limitation: when a player becomes heavily clipped near the image border or leaves the frame, the detector may miss them for several frames. Postprocessing can preserve the same identity after the player is detected again, but it does not create missing boxes for frames where no detection exists.
+
 ## Current Limitations
 
-The current postprocessing handles short noisy tracks and simple adjacent ID switches, but some observed errors require additional logic:
+The current postprocessing handles short noisy tracks, simple adjacent ID switches, and some overlapping duplicate tracks, but some observed errors require additional logic:
 
-- Long-gap re-entry: a player disappears from the frame for a longer time and returns with a new ID. This is not well handled by adjacent stitching because the frame gap and spatial distance can be large.
-- Overlapping duplicate tracks: two IDs can exist at the same time for what appears to be the same player. This requires comparing detections frame-by-frame during the overlap period, not only comparing first/last track statistics.
+- Missing detections near image borders: heavily clipped players can disappear for a few frames before being detected again.
+- Global active-player ranking: `--max-tracks 2` can fail if one real player is split into multiple high-scoring fragments before stitching.
+- Perspective-specific selection: top-N scoring works for many clips, but a better strategy may be needed for different camera perspectives.
 - Main-court player selection: players on neighboring courts may be valid `tennis_player` detections, but they should not necessarily be selected as active players for the main match.
 
-The next postprocessing iteration should add overlapping-duplicate merging first, then a track scoring / main-court selection step.
+The next postprocessing iteration should explore spatially balanced active-player selection. For standard back-view tennis videos, this may mean selecting one strong track from the near side and one from the far side of the court. For side-view cameras, a more general spatial-diversity strategy may be needed instead of assuming that image `y` position corresponds to near/far court position.
