@@ -20,6 +20,13 @@ class TrackPostProcessingConfig:
     min_duplicate_overlap_frames: int = 5
     min_duplicate_iou: float = 0.5
     max_tracks: int | None = None
+    edge_margin_ratio: float = 0.08
+    max_reentry_frame_gap: int = 180
+    max_reentry_gap_ratio: float = 0.25
+    max_reentry_center_distance: float = 700.0
+    max_reentry_center_distance_ratio: float = 0.35
+    max_reentry_area_ratio: float = 3.0
+    reentry_side_ratio: float = 0.4
 
 
 def compute_tracking_stats(result: VideoTrackingResult) -> dict[int, dict[str, int | float]]:
@@ -124,6 +131,50 @@ def filter_short_tracks(
     return new_results, filtering_info
 
 
+def get_near_frame_edge(
+    center_x: float,
+    center_y: float,
+    width: int,
+    height: int,
+    margin_ratio: float = 0.08,
+) -> str | None:
+    margin_x = width * margin_ratio
+    margin_y = height * margin_ratio
+
+    if center_x <= margin_x:
+        return "left"
+    if center_x >= width - margin_x:
+        return "right"
+    if center_y <= margin_y:
+        return "top"
+    if center_y >= height - margin_y:
+        return "bottom"
+
+    return None
+
+
+def is_on_same_frame_side(
+    edge: str,
+    center_x: float,
+    center_y: float,
+    width: int,
+    height: int,
+    side_ratio: float,
+) -> bool:
+    """Check whether a point is on the same broad image side as an edge."""
+
+    if edge == "left":
+        return center_x <= width * side_ratio
+    if edge == "right":
+        return center_x >= width * (1 - side_ratio)
+    if edge == "top":
+        return center_y <= height * side_ratio
+    if edge == "bottom":
+        return center_y >= height * (1 - side_ratio)
+
+    return False
+
+
 def stitch_tracks(result: VideoTrackingResult, stats: dict[int, dict[str, int | float]], cfg: TrackPostProcessingConfig) -> dict[int, int]:
     """Find adjacent track fragments that likely belong to the same object."""
 
@@ -133,19 +184,74 @@ def stitch_tracks(result: VideoTrackingResult, stats: dict[int, dict[str, int | 
     best_candidates: dict[int, tuple[int, float]] = {}
 
     total_frames = max(d.frame_id for d in result.detections) + 1
-
-    max_gap = min(cfg.max_stitch_frame_gap, int(total_frames * cfg.max_stitch_gap_ratio))
-
-    max_overlap = min(cfg.max_stitch_overlap, int(total_frames * cfg.max_stitch_overlap_ratio))
-
     image_diag = (result.width**2 + result.height**2) ** 0.5
-    max_center_distance = min(cfg.max_stitch_center_distance, image_diag * cfg.max_stitch_center_distance_ratio)
+
+    max_overlap = min(
+        cfg.max_stitch_overlap,
+        int(total_frames * cfg.max_stitch_overlap_ratio),
+    )
+
+    normal_max_gap = min(
+        cfg.max_stitch_frame_gap,
+        int(total_frames * cfg.max_stitch_gap_ratio),
+    )
+    normal_max_center_distance = min(
+        cfg.max_stitch_center_distance,
+        image_diag * cfg.max_stitch_center_distance_ratio,
+    )
+
+    reentry_max_gap = min(
+        cfg.max_reentry_frame_gap,
+        int(total_frames * cfg.max_reentry_gap_ratio),
+    )
+    reentry_max_center_distance = min(
+        cfg.max_reentry_center_distance,
+        image_diag * cfg.max_reentry_center_distance_ratio,
+    )
+
     for old_track_id, old_stats in stats.items():
         for new_track_id, new_stats in stats.items():
             if old_track_id == new_track_id:
                 continue
 
             frame_gap = new_stats["first_frame"] - old_stats["last_frame"]
+
+            old_edge = get_near_frame_edge(
+                center_x=old_stats["last_center_x"],
+                center_y=old_stats["last_center_y"],
+                width=result.width,
+                height=result.height,
+                margin_ratio=cfg.edge_margin_ratio,
+            )
+
+            new_edge = get_near_frame_edge(
+                center_x=new_stats["first_center_x"],
+                center_y=new_stats["first_center_y"],
+                width=result.width,
+                height=result.height,
+                margin_ratio=cfg.edge_margin_ratio,
+            )
+
+            is_reentry_candidate = old_edge is not None and (
+                old_edge == new_edge
+                or is_on_same_frame_side(
+                    edge=old_edge,
+                    center_x=new_stats["first_center_x"],
+                    center_y=new_stats["first_center_y"],
+                    width=result.width,
+                    height=result.height,
+                    side_ratio=cfg.reentry_side_ratio,
+                )
+            )
+
+            if is_reentry_candidate:
+                max_gap = reentry_max_gap
+                max_center_distance = reentry_max_center_distance
+                max_area_ratio = cfg.max_reentry_area_ratio
+            else:
+                max_gap = normal_max_gap
+                max_center_distance = normal_max_center_distance
+                max_area_ratio = cfg.max_stitch_area_ratio
 
             if not -max_overlap <= frame_gap <= max_gap:
                 continue
@@ -165,7 +271,7 @@ def stitch_tracks(result: VideoTrackingResult, stats: dict[int, dict[str, int | 
 
             area_ratio = max(old_area, new_area) / min(old_area, new_area)
 
-            if area_ratio > cfg.max_stitch_area_ratio:
+            if area_ratio > max_area_ratio:
                 continue
 
             if new_track_id not in best_candidates:
@@ -179,13 +285,20 @@ def stitch_tracks(result: VideoTrackingResult, stats: dict[int, dict[str, int | 
 def apply_track_stitching(result: VideoTrackingResult, mapping: dict[int, int]) -> VideoTrackingResult:
     """Rewrite track IDs according to a new_track_id -> kept_track_id mapping."""
 
+    def resolve_track_id(track_id: int) -> int:
+        seen = set()
+        while track_id in mapping and track_id not in seen:
+            seen.add(track_id)
+            track_id = mapping[track_id]
+        return track_id
+
     detections_with_stitched_tracks = []
 
     for detection in result.detections:
         track_id = detection.track_id
 
-        if track_id is not None and track_id in mapping:
-            track_id = mapping[track_id]
+        if track_id is not None:
+            track_id = resolve_track_id(track_id)
 
         detections_with_stitched_tracks.append(
             VideoTrackDetection(
@@ -341,12 +454,7 @@ def compute_active_track_scores(
         path_distance_ratio = track_stats["total_path_distance"] / image_diag
         mean_box_area_ratio = track_stats["mean_box_area"] / image_area
 
-        scores[track_id] = (
-            2.0 * presence_ratio
-            + 1.0 * mean_conf
-            + 3.0 * path_distance_ratio
-            + 1.0 * mean_box_area_ratio
-        )
+        scores[track_id] = 2.0 * presence_ratio + 1.0 * mean_conf + 3.0 * path_distance_ratio + 1.0 * mean_box_area_ratio
 
     return scores
 
@@ -370,11 +478,7 @@ def select_active_tracks(
     tracks_sorted = sorted(scores, key=scores.get, reverse=True)
     selected_track_ids = set(tracks_sorted[: cfg.max_tracks])
 
-    selected_detections = [
-        detection
-        for detection in result.detections
-        if detection.track_id in selected_track_ids
-    ]
+    selected_detections = [detection for detection in result.detections if detection.track_id in selected_track_ids]
 
     dropped_track_ids = sorted(set(scores) - selected_track_ids)
 

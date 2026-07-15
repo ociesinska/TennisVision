@@ -35,6 +35,17 @@ def main():
         default=TrackPostProcessingConfig.max_stitch_center_distance_ratio,
     )
     parser.add_argument("--max-stitch-area-ratio", type=float, default=TrackPostProcessingConfig.max_stitch_area_ratio)
+    parser.add_argument("--edge-margin-ratio", type=float, default=TrackPostProcessingConfig.edge_margin_ratio)
+    parser.add_argument("--max-reentry-frame-gap", type=int, default=TrackPostProcessingConfig.max_reentry_frame_gap)
+    parser.add_argument("--max-reentry-gap-ratio", type=float, default=TrackPostProcessingConfig.max_reentry_gap_ratio)
+    parser.add_argument("--max-reentry-center-distance", type=float, default=TrackPostProcessingConfig.max_reentry_center_distance)
+    parser.add_argument(
+        "--max-reentry-center-distance-ratio",
+        type=float,
+        default=TrackPostProcessingConfig.max_reentry_center_distance_ratio,
+    )
+    parser.add_argument("--max-reentry-area-ratio", type=float, default=TrackPostProcessingConfig.max_reentry_area_ratio)
+    parser.add_argument("--reentry-side-ratio", type=float, default=TrackPostProcessingConfig.reentry_side_ratio)
     parser.add_argument("--min-duplicate-overlap-frames", type=int, default=TrackPostProcessingConfig.min_duplicate_overlap_frames)
     parser.add_argument("--min-duplicate-iou", type=float, default=TrackPostProcessingConfig.min_duplicate_iou)
     args = parser.parse_args()
@@ -49,6 +60,13 @@ def main():
         max_stitch_center_distance=args.max_stitch_center_distance,
         max_stitch_center_distance_ratio=args.max_stitch_center_distance_ratio,
         max_stitch_area_ratio=args.max_stitch_area_ratio,
+        edge_margin_ratio=args.edge_margin_ratio,
+        max_reentry_frame_gap=args.max_reentry_frame_gap,
+        max_reentry_gap_ratio=args.max_reentry_gap_ratio,
+        max_reentry_center_distance=args.max_reentry_center_distance,
+        max_reentry_center_distance_ratio=args.max_reentry_center_distance_ratio,
+        max_reentry_area_ratio=args.max_reentry_area_ratio,
+        reentry_side_ratio=args.reentry_side_ratio,
         min_duplicate_overlap_frames=args.min_duplicate_overlap_frames,
         min_duplicate_iou=args.min_duplicate_iou,
         max_tracks=args.max_tracks,

@@ -7,9 +7,9 @@ from pathlib import Path
 import mlflow
 
 from tennisvision.core.mlflow_utils import setup_mlflow
+from tennisvision.tasks.video_detection.postprocessing import compute_tracking_stats
 from tennisvision.tasks.video_detection.tracking import (
     VideoTrackingConfig,
-    compute_tracking_stats,
     compute_tracking_summary,
     save_sample_frames,
     track_video,
