@@ -4,6 +4,7 @@
 
 | Field | Value |
 | --- | --- |
+| Baseline version | v1 |
 | Detector | yolo11s_img1280_ep50_playersv2 |
 | Detector run ID | d21d335020d14f4498d5388aebebd03b |
 | Model artifact path | weights/best.pt |
@@ -25,10 +26,10 @@
 | Re-entry side ratio | 0.4 |
 | Singles max tracks | 2 |
 | Doubles max tracks | 4 |
-| Status | Accepted practical baseline |
+| Status | Accepted practical baseline v1 |
 | Notes | Current baseline is tuned for stable player identity across tested clips, including short re-entry gaps. It is not treated as a final tracker. |
 
-This configuration is intentionally explicit. The parameters are frozen as a practical baseline so future work can compare against a stable reference instead of continuously changing tracker/postprocessing behavior. Further changes should be introduced as new experiments rather than silently modifying the baseline.
+This configuration is the current video tracking pipeline baseline v1. It is intentionally explicit: the parameters are frozen as a practical baseline so future work can compare against a stable reference instead of continuously changing tracker/postprocessing behavior. Further changes should be introduced as new experiments rather than silently modifying the baseline.
 
 ## Notes
 
