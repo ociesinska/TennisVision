@@ -8,10 +8,10 @@ from tempfile import NamedTemporaryFile
 
 from fastapi import FastAPI, File, Request, UploadFile
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
 
 from tennisvision.core.mlflow_utils import setup_mlflow
 from tennisvision.core.utils import get_device
+from tennisvision.tasks.detection.api.schemas import BoundingBoxResponse, DetectionItemResponse, DetectionResponse
 from tennisvision.tasks.detection.inference import (
     DetectionInferenceConfig,
     get_model_source,
@@ -21,27 +21,6 @@ from tennisvision.tasks.detection.inference import (
 from tennisvision.tasks.detection.visualization import viz_detected_boxes
 
 logger = logging.getLogger(__name__)
-
-
-class BoundingBoxResponse(BaseModel):
-    x1: float
-    y1: float
-    x2: float
-    y2: float
-
-
-class DetectionItemResponse(BaseModel):
-    class_id: int
-    label: str
-    confidence: float | None = 0.25
-    box: BoundingBoxResponse
-
-
-class DetectionResponse(BaseModel):
-    width: int
-    height: int
-    detections: list[DetectionItemResponse]
-    model_uri: str | None = None
 
 
 @asynccontextmanager

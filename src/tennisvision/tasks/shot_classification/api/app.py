@@ -12,11 +12,11 @@ from fastapi import FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.responses import JSONResponse, Response
 from mlflow.tracking import MlflowClient
 from PIL import Image
-from pydantic import BaseModel
 
 from tennisvision.core.explainability import gradcam_heatmap, overlay_heatmap, pick_cam_layer, preprocess_PIL
 from tennisvision.core.mlflow_utils import load_model_from_mlflow, setup_mlflow
 from tennisvision.core.utils import concat_rgb, get_device, rgb_ndarray_to_png_bytes
+from tennisvision.tasks.shot_classification.api.schemas import BatchItem, BatchPredictResponse, PredictResponse, TopKItem
 from tennisvision.tasks.shot_classification.data import build_preprocess
 
 logger = logging.getLogger(__name__)
@@ -29,33 +29,6 @@ MAX_BATCH_SIZE_MB = 25
 MAX_BATCH_FILES = 64
 
 _DEFAULT_IDX_TO_CLASS = {0: "backhand", 1: "forehand", 2: "ready_position", 3: "serve"}
-
-
-class PredictResponse(BaseModel):
-    label: str
-    confidence: float
-    topk: list[dict]
-    model_uri: str
-
-
-class TopKItem(BaseModel):
-    label: str
-    p: float
-
-
-class BatchItem(BaseModel):
-    filename: str
-    label: str | None = None
-    confidence: float | None = None
-    topk: list[TopKItem] | None = None
-    error: str | None = None
-
-
-class BatchPredictResponse(BaseModel):
-    model_uri: str
-    device: str
-    latency_ms: float
-    results: list[BatchItem]
 
 
 def _load_idx_to_class(model_uri: str, run_id: str, tracking_uri: str) -> dict[int, str]:
