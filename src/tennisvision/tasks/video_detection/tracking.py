@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from importlib.resources import files
 from pathlib import Path
+from typing import Any
 
 import cv2
 
@@ -31,8 +32,9 @@ class VideoTrackingConfig:
     run_name: str = "video_tracking"
 
 
-def track_video(cfg: VideoTrackingConfig, video_path: str | Path) -> VideoTrackingResult:
-    model = load_detector(cfg)
+def track_video(cfg: VideoTrackingConfig, video_path: str | Path, model: Any | None = None) -> VideoTrackingResult:
+    if model is None:
+        model = load_detector(cfg)
 
     if cfg.backend == "ultralytics":
         result = track_ultralytics_video(model, video_path, cfg)

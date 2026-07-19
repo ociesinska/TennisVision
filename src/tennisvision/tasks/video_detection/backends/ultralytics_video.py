@@ -37,7 +37,7 @@ def track_ultralytics_video(
         imgsz=cfg.imgsz,
         device=device,
         persist=True,
-        stream=False,
+        stream=True,
         save=cfg.save_video,
         project=str(cfg.output_dir),
         name=cfg.run_name,

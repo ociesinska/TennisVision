@@ -23,7 +23,7 @@ def render_tracking_video(video_path: Path, tracking_result: VideoTrackingResult
     width, height = tracking_result.width, tracking_result.height
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+    fourcc = cv2.VideoWriter_fourcc(*"avc1")
     writer = cv2.VideoWriter(str(output_path), fourcc, fps, (width, height))
     if not writer.isOpened():
         raise ValueError(f"Could not open video writer: {output_path}")
