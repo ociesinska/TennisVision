@@ -1,0 +1,24 @@
+min_count: 10
+min_presence_ratio: 0.02
+min_mean_conf: 0.5
+min_mean_box_area_ratio: 0.0002
+min_total_path_distance_ratio: 0.005
+
+max_stitch_frame_gap: 120
+max_stitch_gap_ratio: 0.18
+max_stitch_overlap: 10
+max_stitch_overlap_ratio: 0.01
+max_stitch_center_distance: 250
+max_stitch_center_distance_ratio: 0.12
+max_stitch_area_ratio: 2.0
+
+min_duplicate_overlap_frames: 5
+min_duplicate_iou: 0.5
+
+edge_margin_ratio: 0.08
+max_reentry_frame_gap: 180
+max_reentry_gap_ratio: 0.25
+max_reentry_center_distance: 700
+max_reentry_center_distance_ratio: 0.35
+max_reentry_area_ratio: 3.0
+reentry_side_ratio: 0.4
