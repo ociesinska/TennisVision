@@ -1,6 +1,6 @@
 .PHONY: format lint format_and_lint install sync check
 
-CHECK_PATHS = tests/unit/video_detection \
+CHECK_PATHS = tests/unit/video_detection tests/integration/video_detection \
 	src/tennisvision/tasks/video_detection/postprocessing.py \
 	src/tennisvision/tasks/video_detection/tracking.py \
 	src/tennisvision/tasks/video_detection/types.py \

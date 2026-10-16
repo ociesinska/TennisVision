@@ -107,6 +107,13 @@ Ruff currently checks the video postprocessing tests and the four related tracki
 modules listed in `CHECK_PATHS` in the Makefile. Pytest runs the complete test suite.
 The tests use synthetic detections and require no model weights, videos, GPU, or MLflow server.
 
+Integration tests in `tests/integration/video_detection` exercise the postprocessing
+CLI with temporary JSON files, including output artifacts, reloading results, empty
+sequences, and invalid input. They use real postprocessing and summary calculations;
+MLflow logging and video rendering are replaced with test doubles. Importing the CLI
+still requires the project's ML dependencies. Run these tests separately with
+`uv run --no-sync python -m pytest tests/integration`.
+
 The GitHub Actions workflow in `.github/workflows/ci.yml` runs on pull requests and
 pushes to `main`, using Python 3.12 on Ubuntu. It installs the existing project and
 development dependencies from `uv.lock`, with uv caching to reduce repeat downloads.
