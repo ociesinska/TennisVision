@@ -93,6 +93,30 @@ uv pip install -e .
 
 If you do not install the project, prefix commands with `PYTHONPATH=src`.
 
+### Tests and code checks
+
+Install the locked development dependencies and run the same checks as CI:
+
+```bash
+uv sync --locked --extra dev
+make check
+```
+
+`make check` runs pytest, then Ruff lint and formatting checks without changing files.
+Ruff currently checks the video postprocessing tests and the four related tracking
+modules listed in `CHECK_PATHS` in the Makefile. Pytest runs the complete test suite.
+The tests use synthetic detections and require no model weights, videos, GPU, or MLflow server.
+
+The GitHub Actions workflow in `.github/workflows/ci.yml` runs on pull requests and
+pushes to `main`, using Python 3.12 on Ubuntu. It installs the existing project and
+development dependencies from `uv.lock`, with uv caching to reduce repeat downloads.
+This currently includes the full ML dependency stack; model evaluation is not run.
+Check the **Tests and Ruff** job in the pull request checks or repository Actions tab
+for results. The check stops at the first failed command; its log shows the failure.
+
+If `UV_PROJECT_ENVIRONMENT` is set locally, uv uses that environment for both commands.
+To use `.venv` explicitly, prefix both commands with `UV_PROJECT_ENVIRONMENT=.venv`.
+
 ### MLflow
 
 Start the MLflow server:
