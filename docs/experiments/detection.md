@@ -1,5 +1,11 @@
 # Detection Experiments
 
+[Documentation index](../README.md) · [Usage guide](../tasks/detection.md)
+
+Jump to: [Dataset](#dataset) · [Baseline](#current-baseline) ·
+[Comparisons](#experiment-table) · [Run IDs](#run-ids) ·
+[Hard examples](#hard-examples) · [Reproduction](#repro-commands).
+
 ## Dataset
 
 | Version | Date | Splits | Notes |
@@ -76,7 +82,9 @@ Local examples to revisit:
 
 ## Repro Commands
 
-### Train Current Baseline
+These commands refer to the earlier `yolo11s_img1280_ep30` run. The selected updated-data baseline and its run IDs are listed above.
+
+### Train the Earlier 30-Epoch Reference
 
 ```bash
 uv run python -m tennisvision.tasks.detection.scripts.run_experiment \
@@ -87,7 +95,7 @@ uv run python -m tennisvision.tasks.detection.scripts.run_experiment \
   --batch 2
 ```
 
-### Evaluate Current Baseline
+### Evaluate the Earlier 30-Epoch Reference
 
 ```bash
 uv run python -m tennisvision.tasks.detection.scripts.evaluate \

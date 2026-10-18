@@ -1,5 +1,12 @@
 # Video Tracking Experiments
 
+[Documentation index](../README.md) · [Usage guide](../tasks/video-tracking.md)
+
+Jump to: [Baseline](#current-baseline) · [Tracker choice](#tracker-choice) ·
+[Iteration 1](#postprocessing-iteration-1) · [Iteration 2](#postprocessing-iteration-2) ·
+[Iteration 3](#postprocessing-iteration-3) · [Iteration 4](#postprocessing-iteration-4) ·
+[Limitations](#current-limitations) · [Validation](#baseline-validation).
+
 ## Current Baseline
 
 | Field | Value |
@@ -43,7 +50,7 @@ Both ByteTrack and BoT-SORT were tested on the same video clips. BoT-SORT produc
 
 | Before threshold tuning | After threshold tuning |
 | --- | --- |
-| ![Tracking before threshold tuning](assets/video1.gif) | ![Tracking after threshold tuning](assets/video1_det.gif) |
+| ![Tracking before threshold tuning](../assets/video-tracking/video1.gif) | ![Tracking after threshold tuning](../assets/video-tracking/video1_det.gif) |
 
 The tuned setup uses a higher detection confidence and a higher `new_track_thresh`. In this example, the player detections remain stable while unnecessary detections and new track creation are reduced.
 
@@ -188,7 +195,7 @@ Qualitative example from `video6`:
 
 | Before re-entry-aware postprocessing | After re-entry-aware postprocessing |
 | --- | --- |
-| ![Raw tracking before re-entry stitching](assets/video6_raw_4s_to_10s.gif) | ![Tracking after re-entry stitching](assets/video6_4s_to_10s_tracking_demo.gif) |
+| ![Raw tracking before re-entry stitching](../assets/video-tracking/video6_raw_4s_to_10s.gif) | ![Tracking after re-entry stitching](../assets/video-tracking/video6_4s_to_10s_tracking_demo.gif) |
 
 In the raw tracking output, the player receives a different ID after re-entering the frame. After re-entry-aware postprocessing, the fragment is stitched back to the same player identity. The remaining gap immediately after re-entry is still visible: the player is not detected for a short period before the detector starts producing boxes again. This is a detector/input limitation rather than an ID stitching problem.
 
@@ -218,7 +225,7 @@ The next postprocessing iteration should explore spatially balanced active-playe
 
 The current baseline should be validated on a fixed set of representative held-out clips before introducing another postprocessing iteration. These clips should be different from the videos used while tuning tracker and postprocessing parameters, otherwise the validation would mostly confirm that the current settings fit the tuning set.
 
-Each clip should be evaluated with the frozen baseline command from the README, then reviewed qualitatively in the rendered output video.
+Each clip should be evaluated with the frozen baseline command from the [tracking guide](../tasks/video-tracking.md#video-tracking-postprocessing), then reviewed qualitatively in the rendered output video.
 
 Status guide:
 
