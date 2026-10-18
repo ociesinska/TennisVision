@@ -3,6 +3,7 @@ from dataclasses import dataclass
 
 from tennisvision.core.settings import RuntimeSettings
 
+
 @dataclass(frozen=True)
 class ShotClassificationSettings:
     runtime: RuntimeSettings
@@ -17,12 +18,8 @@ def load_shot_classification_settings(
 ) -> ShotClassificationSettings:
     return ShotClassificationSettings(
         runtime=runtime,
-        model_uri=os.getenv(
-            "SHOT_CLASSIFICATION_MODEL_URI"
-        ) or None,
-        run_id=os.getenv(
-            "SHOT_CLASSIFICATION_RUN_ID"
-        ) or None,
+        model_uri=os.getenv("SHOT_CLASSIFICATION_MODEL_URI") or None,
+        run_id=os.getenv("SHOT_CLASSIFICATION_RUN_ID") or None,
         model_name=os.getenv(
             "SHOT_CLASSIFICATION_MODEL_NAME",
             "mobilenet_v3_large",

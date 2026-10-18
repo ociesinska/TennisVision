@@ -103,7 +103,7 @@ make check
 ```
 
 `make check` runs pytest, then Ruff lint and formatting checks without changing files.
-Ruff currently checks the video postprocessing tests and the four related tracking
+Ruff currently checks the video postprocessing tests and the related tracking
 modules listed in `CHECK_PATHS` in the Makefile. Pytest runs the complete test suite.
 The tests use synthetic detections and require no model weights, videos, GPU, or MLflow server.
 
@@ -281,6 +281,11 @@ Typical outputs include:
 - tracked video (`.mp4`)
 - `tracks.json`
 - sample frames for quick inspection
+
+Tracking statistics use the number of processed frames, including frames without
+detections. Frame counts are preserved in `tracks.json` and through postprocessing;
+the source video's reported count is stored separately for reference. Files without
+a processed count use an explicitly labelled detection-span estimate.
 
 The same outputs are logged to the `Player Video Tracking` MLflow experiment. Large videos should usually stay as local/MLflow artifacts rather than committed to git; use small screenshots or short GIFs in documentation when a visual preview is needed.
 

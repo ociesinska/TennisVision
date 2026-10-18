@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from tennisvision.tasks.video_detection.types import VideoTrackDetection, VideoTrackingResult
 
@@ -33,15 +33,17 @@ def compute_tracking_stats(result: VideoTrackingResult) -> dict[int, dict[str, i
     """Compute per-track summary statistics used by later cleanup steps."""
 
     tracking_stats: dict[int, dict[str, int | float]] = {}
+    frames_by_track: dict[int, set[int]] = {}
 
     if not result.detections:
         return {}
 
-    for detection in result.detections:
+    for detection in sorted(result.detections, key=lambda d: d.frame_id):
         if detection.track_id is None:
             continue
 
         curr_track_id = detection.track_id
+        frames_by_track.setdefault(curr_track_id, set()).add(detection.frame_id)
 
         x1, y1, x2, y2 = detection.xyxy
         center_x = (x1 + x2) / 2
@@ -81,14 +83,14 @@ def compute_tracking_stats(result: VideoTrackingResult) -> dict[int, dict[str, i
     if not tracking_stats:
         return {}
 
-    total_frames = max(detection.frame_id for detection in result.detections) + 1
+    total_frames = result.statistics_frame_count
 
     for track_id in tracking_stats:
         stats = tracking_stats[track_id]
         stats["mean_conf"] = stats["total_conf"] / stats["count"]
         stats["mean_box_area"] = stats["total_box_area"] / stats["count"]
         stats["duration_frames"] = stats["last_frame"] - stats["first_frame"] + 1
-        stats["presence_ratio"] = stats["count"] / total_frames
+        stats["presence_ratio"] = len(frames_by_track[track_id]) / total_frames
         stats["duration_ratio"] = stats["duration_frames"] / total_frames
 
     return tracking_stats
@@ -102,7 +104,7 @@ def filter_short_tracks(
     if not result.detections:
         return result, {}
 
-    total_frames = max(d.frame_id for d in result.detections) + 1
+    total_frames = result.statistics_frame_count
     min_required_count = max(cfg.min_count, int(total_frames * cfg.min_presence_ratio))
 
     drop_track_ids = set()
@@ -124,9 +126,7 @@ def filter_short_tracks(
         "dropped_track_ids": sorted(drop_track_ids),
     }
 
-    new_results = VideoTrackingResult(
-        video_path=result.video_path, width=result.width, height=result.height, fps=result.fps, detections=filtered_detections
-    )
+    new_results = replace(result, detections=filtered_detections)
 
     return new_results, filtering_info
 
@@ -183,7 +183,7 @@ def stitch_tracks(result: VideoTrackingResult, stats: dict[int, dict[str, int | 
 
     best_candidates: dict[int, tuple[int, float]] = {}
 
-    total_frames = max(d.frame_id for d in result.detections) + 1
+    total_frames = result.statistics_frame_count
     image_diag = (result.width**2 + result.height**2) ** 0.5
 
     max_overlap = min(
@@ -312,13 +312,7 @@ def apply_track_stitching(result: VideoTrackingResult, mapping: dict[int, int]) 
             )
         )
 
-    return VideoTrackingResult(
-        video_path=result.video_path,
-        width=result.width,
-        height=result.height,
-        fps=result.fps,
-        detections=detections_with_stitched_tracks,
-    )
+    return replace(result, detections=detections_with_stitched_tracks)
 
 
 def deduplicate_track_frame_detections(result: VideoTrackingResult) -> VideoTrackingResult:
@@ -339,9 +333,7 @@ def deduplicate_track_frame_detections(result: VideoTrackingResult) -> VideoTrac
 
     deduplicated_detections = sorted(best_detections.values(), key=lambda detection: (detection.frame_id, detection.track_id))
 
-    return VideoTrackingResult(
-        video_path=result.video_path, width=result.width, height=result.height, fps=result.fps, detections=deduplicated_detections
-    )
+    return replace(result, detections=deduplicated_detections)
 
 
 def group_detections_by_track_and_frame(
@@ -482,13 +474,7 @@ def select_active_tracks(
 
     dropped_track_ids = sorted(set(scores) - selected_track_ids)
 
-    return VideoTrackingResult(
-        video_path=result.video_path,
-        width=result.width,
-        height=result.height,
-        fps=result.fps,
-        detections=selected_detections,
-    ), {
+    return replace(result, detections=selected_detections), {
         "active_track_scores": scores,
         "selected_track_ids": sorted(selected_track_ids),
         "dropped_track_ids": dropped_track_ids,
@@ -525,6 +511,13 @@ def postprocess_tracking_result(result: VideoTrackingResult, cfg: TrackPostProce
     final_stats = compute_tracking_stats(active_result)
 
     postprocessing_info = {
+        "frame_metadata": {
+            "processed_frame_count": result.processed_frame_count,
+            "source_frame_count": result.source_frame_count,
+            "inferred_frame_count": result.inferred_frame_count,
+            "statistics_frame_count": result.statistics_frame_count,
+            "basis": result.frame_count_basis,
+        },
         "raw_stats": raw_stats,
         "filtering": filtering_info,
         "overlap_mapping": overlap_mapping,

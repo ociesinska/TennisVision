@@ -96,9 +96,10 @@ def test_json_to_postprocessed_artifacts(tmp_path, monkeypatch, external_service
     info = json.loads((output / "postprocessing_info.json").read_text())
     summary = json.loads((output / "summary_postprocessed.json").read_text())
     assert source.read_text() == original_text
-    assert {key: value for key, value in processed.items() if key != "detections"} == {
-        key: value for key, value in tracks_payload.items() if key != "detections"
-    }
+    expected_metadata = {key: value for key, value in tracks_payload.items() if key != "detections"}
+    # Legacy input has no frame counts; serialization must preserve them as unknown.
+    expected_metadata.update(processed_frame_count=None, source_frame_count=None, inferred_frame_count=6)
+    assert {key: value for key, value in processed.items() if key != "detections"} == expected_metadata
     assert [d["frame_id"] for d in processed["detections"]] == list(range(6))
     assert [d["track_id"] for d in processed["detections"]] == [7] * 6
     assert [d["confidence"] for d in processed["detections"]] == [0.9, 0.9, 0.8, 0.8, 0.8, 0.8]
@@ -143,7 +144,8 @@ def test_empty_json_sequence_writes_empty_result(tmp_path, monkeypatch, external
     source = tmp_path / "empty.json"
     source.write_text(json.dumps(tracks_payload))
     run_cli(monkeypatch, source)
-    assert json.loads((tmp_path / "tracks_postprocessed.json").read_text()) == tracks_payload
+    expected = {**tracks_payload, "processed_frame_count": None, "source_frame_count": None, "inferred_frame_count": 0}
+    assert json.loads((tmp_path / "tracks_postprocessed.json").read_text()) == expected
     summary = json.loads((tmp_path / "summary_postprocessed.json").read_text())
     assert all(value == 0 for value in summary.values())
     info = json.loads((tmp_path / "postprocessing_info.json").read_text())
@@ -161,4 +163,61 @@ def test_invalid_input_fails_before_external_work(tmp_path, monkeypatch, externa
     assert not output.exists()
     external_services.setup.assert_not_called()
     external_services.mlflow.start_run.assert_not_called()
+    external_services.render.assert_not_called()
+
+
+@pytest.mark.parametrize("processed_count", [0, 10, 100])
+def test_explicit_frame_counts_survive_json_round_trip(
+    tmp_path,
+    monkeypatch,
+    external_services,
+    tracks_payload,
+    processed_count,
+):
+    tracks_payload.update(processed_frame_count=processed_count, source_frame_count=120)
+    if processed_count == 0:
+        tracks_payload["detections"] = []
+    source = tmp_path / "tracks.json"
+    source.write_text(json.dumps(tracks_payload))
+    run_cli(monkeypatch, source)
+    output_path = tmp_path / "tracks_postprocessed.json"
+    output = json.loads(output_path.read_text())
+    assert output["processed_frame_count"] == processed_count
+    assert output["source_frame_count"] == 120
+    assert output["inferred_frame_count"] is None
+    summary = json.loads((tmp_path / "summary_postprocessed.json").read_text())
+    assert summary["frames_with_detections_ratio"] == (6 / processed_count if processed_count else 0)
+    assert summary["min_detections_per_frame"] == 0
+    info = json.loads((tmp_path / "postprocessing_info.json").read_text())
+    assert info["frame_metadata"]["basis"] == "processed_frames"
+    second = tmp_path / "second"
+    run_cli(monkeypatch, output_path, "--output-dir", str(second))
+    assert json.loads((second / "tracks_postprocessed.json").read_text()) == output
+
+
+def test_legacy_fallback_survives_filtering_and_reload(tmp_path, monkeypatch, external_services, tracks_payload, caplog):
+    late_detection = {**tracks_payload["detections"][0], "frame_id": 99, "track_id": 123, "timestamp_sec": 99 / 25}
+    tracks_payload["detections"].append(late_detection)
+    source = tmp_path / "legacy.json"
+    source.write_text(json.dumps(tracks_payload))
+    run_cli(monkeypatch, source)
+    output_path = tmp_path / "tracks_postprocessed.json"
+    output = json.loads(output_path.read_text())
+    assert output["processed_frame_count"] is None
+    assert output["inferred_frame_count"] == 100
+    assert max(d["frame_id"] for d in output["detections"]) == 5
+    assert "detection-span fallback" in caplog.text
+    second = tmp_path / "second"
+    run_cli(monkeypatch, output_path, "--output-dir", str(second))
+    assert json.loads((second / "tracks_postprocessed.json").read_text()) == output
+    assert json.loads((second / "summary_postprocessed.json").read_text())["frames_with_detections_ratio"] == 0.06
+
+
+def test_inconsistent_json_count_fails_before_external_work(tmp_path, monkeypatch, external_services, tracks_payload):
+    tracks_payload["processed_frame_count"] = 0
+    source = tmp_path / "invalid-count.json"
+    source.write_text(json.dumps(tracks_payload))
+    with pytest.raises(ValueError, match="processed_frame_count"):
+        run_cli(monkeypatch, source)
+    external_services.setup.assert_not_called()
     external_services.render.assert_not_called()
