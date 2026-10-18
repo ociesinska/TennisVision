@@ -1,5 +1,6 @@
 import argparse
 import json
+import logging
 from dataclasses import asdict
 from datetime import datetime
 from pathlib import Path
@@ -81,7 +82,17 @@ def main():
         height=raw_result["height"],
         fps=raw_result["fps"],
         detections=[VideoTrackDetection(**detection) for detection in raw_result["detections"]],
+        processed_frame_count=raw_result.get("processed_frame_count"),
+        source_frame_count=raw_result.get("source_frame_count"),
+        inferred_frame_count=raw_result.get("inferred_frame_count"),
     )
+
+    if result.processed_frame_count is None:
+        logging.getLogger(__name__).warning(
+            "Processed frame count is unknown; using detection-span fallback (%s frames). "
+            "Coverage ratios are estimates and may omit trailing empty frames.",
+            result.statistics_frame_count,
+        )
 
     video_path = args.video or Path(result.video_path)
     output_dir = args.output_dir or args.tracks.parent

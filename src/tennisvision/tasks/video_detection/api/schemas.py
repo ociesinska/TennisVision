@@ -20,6 +20,10 @@ class VideoTrackingResponse(BaseModel):
     height: int
     fps: float
     detections: list[VideoTrackDetectionResponse]
+    processed_frame_count: int | None = None
+    source_frame_count: int | None = None
+    inferred_frame_count: int | None = None
+    frame_count_basis: str | None = None
 
     @classmethod
     def from_result(cls, result: VideoTrackingResult, video_url: str, result_id: str) -> "VideoTrackingResponse":
@@ -29,6 +33,10 @@ class VideoTrackingResponse(BaseModel):
             width=result.width,
             height=result.height,
             fps=result.fps,
+            processed_frame_count=result.processed_frame_count,
+            source_frame_count=result.source_frame_count,
+            inferred_frame_count=result.inferred_frame_count,
+            frame_count_basis=result.frame_count_basis,
             detections=[
                 VideoTrackDetectionResponse(
                     frame_id=d.frame_id,

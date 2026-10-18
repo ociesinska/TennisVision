@@ -4,7 +4,9 @@ CHECK_PATHS = tests/unit/video_detection tests/integration/video_detection \
 	src/tennisvision/tasks/video_detection/postprocessing.py \
 	src/tennisvision/tasks/video_detection/tracking.py \
 	src/tennisvision/tasks/video_detection/types.py \
-	src/tennisvision/tasks/video_detection/backends/ultralytics_video.py
+	src/tennisvision/tasks/video_detection/backends/ultralytics_video.py \
+	src/tennisvision/tasks/video_detection/api/schemas.py \
+	src/tennisvision/tasks/video_detection/scripts/postprocess_tracks.py
 
 install: sync
 

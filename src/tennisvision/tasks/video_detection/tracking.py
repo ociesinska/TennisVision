@@ -101,10 +101,10 @@ def compute_tracking_summary(result: VideoTrackingResult) -> dict[str, float | i
 
     unique_track_ids = {detection.track_id for detection in result.detections if detection.track_id is not None}
 
-    total_frames = max(detections_per_frame) + 1
+    total_frames = result.statistics_frame_count
 
     return {
-        "min_detections_per_frame": min(counts),
+        "min_detections_per_frame": 0 if len(counts) < total_frames else min(counts),
         "max_detections_per_frame": max(counts),
         "mean_detections_per_frame": sum(counts) / total_frames,
         "frames_with_detections": len(detections_per_frame),

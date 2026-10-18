@@ -114,12 +114,7 @@ async def track_postprocess(
     tracking_cfg = request.app.state.tracking_cfg
     postprocessing_cfg = request.app.state.postprocessing_cfg
 
-
-    effective_max_tracks = (
-        max_players
-        if max_players is not None
-        else postprocessing_cfg.max_tracks
-    )
+    effective_max_tracks = max_players if max_players is not None else postprocessing_cfg.max_tracks
 
     request_postprocessing_cfg = replace(
         postprocessing_cfg,

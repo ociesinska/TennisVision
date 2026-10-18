@@ -1,3 +1,4 @@
+import math
 from pathlib import Path
 from typing import Any
 
@@ -7,18 +8,23 @@ from tennisvision.core.utils import get_device
 from tennisvision.tasks.video_detection.types import VideoTrackDetection, VideoTrackingResult
 
 
-def read_video_metadata(video_path: str | Path) -> tuple[int, int, float]:
+def read_video_metadata(video_path: str | Path) -> tuple[int, int, float, int | None]:
     cap = cv2.VideoCapture(str(video_path))
-    if not cap.isOpened():
-        raise ValueError(f"Could not open video {video_path}")
+    try:
+        if not cap.isOpened():
+            raise ValueError(f"Could not open video {video_path}")
 
-    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    fps = float(cap.get(cv2.CAP_PROP_FPS))
+        width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        fps = float(cap.get(cv2.CAP_PROP_FPS))
 
-    cap.release()
+        reported_count = float(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        source_frame_count = int(reported_count) if math.isfinite(reported_count) and reported_count > 0 else None
 
-    return width, height, fps
+        return width, height, fps, source_frame_count
+
+    finally:
+        cap.release()
 
 
 def track_ultralytics_video(
@@ -45,9 +51,11 @@ def track_ultralytics_video(
     )
 
     detections = []
-    width, height, fps = read_video_metadata(video_path)
+    width, height, fps, source_frame_count = read_video_metadata(video_path)
+    processed_frame_count = 0
 
     for frame_id, result in enumerate(results):
+        processed_frame_count += 1
         timestamp = frame_id / fps if fps > 0 else 0.0
 
         if result.boxes is None:
@@ -77,8 +85,10 @@ def track_ultralytics_video(
 
     return VideoTrackingResult(
         video_path=str(video_path),
-        width=int(width),
-        height=int(height),
+        width=width,
+        height=height,
         fps=fps,
         detections=detections,
+        processed_frame_count=processed_frame_count,
+        source_frame_count=source_frame_count,
     )
