@@ -1,5 +1,6 @@
-"""Load dense, zero-based CVAT video XML without inferring absent players."""
+"""Load saved tracking annotations and predictions without inventing observations."""
 
+import json
 import math
 import xml.etree.ElementTree as ET
 from pathlib import Path
@@ -22,6 +23,107 @@ def _flag(box: ET.Element, name: str, context: str) -> bool:
     if value not in ("0", "1"):
         raise ValueError(f"{context}: {name} must be '0' or '1', got {value!r}")
     return value == "1"
+
+
+def _json_integer(value: object, context: str, minimum: int = 0) -> int:
+    # JSON numbers must be actual integers, not strings, booleans, or rounded floats.
+    if type(value) is not int:
+        raise ValueError(f"{context}: expected an integer, got {value!r}")
+    return _integer(str(value), context, minimum)
+
+
+def _finite_number(value: object, context: str) -> float:
+    if type(value) not in (int, float):
+        raise ValueError(f"{context}: expected a finite number, got {value!r}")
+    try:
+        number = float(value)
+    except OverflowError as exc:
+        raise ValueError(f"{context}: expected a finite number") from exc
+    if not math.isfinite(number):
+        raise ValueError(f"{context}: expected a finite number")
+    return number
+
+
+def load_prediction_json(path: str | Path) -> TrackingSequence:
+    """Load raw or postprocessed TennisVision JSON using its processed timeline.
+
+    Missing authoritative counts and unassigned identities are errors. No score
+    filtering, ID remapping, clipping, or deduplication occurs. Empty frames are
+    represented by frame_count rather than fabricated observations.
+    """
+    path = Path(path)
+    try:
+        with path.open() as stream:
+            data = json.load(stream)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"{path}: malformed prediction JSON: {exc}") from exc
+    if not isinstance(data, dict):
+        raise ValueError(f"{path}: expected a JSON object")
+    count = _json_integer(data.get("processed_frame_count"), f"{path}: processed_frame_count (authoritative count required)")
+    width = _json_integer(data.get("width"), f"{path}: width", minimum=1)
+    height = _json_integer(data.get("height"), f"{path}: height", minimum=1)
+    fps = _finite_number(data.get("fps"), f"{path}: fps")
+    if fps <= 0:
+        raise ValueError(f"{path}: fps must be positive")
+    video_path = data.get("video_path")
+    if not isinstance(video_path, str) or not video_path.strip() or not Path(video_path).stem:
+        raise ValueError(f"{path}: video_path must identify the source video")
+    detections = data.get("detections")
+    if not isinstance(detections, list):
+        raise ValueError(f"{path}: detections must be a list")
+    observations = []
+    labels: dict[int, str] = {}
+    seen = set()
+    bounds_count = 0
+    for index, detection in enumerate(detections):
+        context = f"{path}: detection {index}"
+        if not isinstance(detection, dict):
+            raise ValueError(f"{context}: expected an object")
+        frame = _json_integer(detection.get("frame_id"), f"{context}: frame_id")
+        if frame >= count:
+            raise ValueError(f"{context}: frame {frame} outside processed range [0, {count})")
+        context += f", frame {frame}"
+        if detection.get("track_id") is None:
+            raise ValueError(f"{context}: missing track_id; identity evaluation requires assigned IDs")
+        track = _json_integer(detection["track_id"], f"{context}: track_id")
+        context += f", track {track}"
+        if (frame, track) in seen:
+            raise ValueError(f"{context}: duplicate observation")
+        seen.add((frame, track))
+        box = detection.get("xyxy")
+        if not isinstance(box, list) or len(box) != 4:
+            raise ValueError(f"{context}: xyxy must contain four coordinates")
+        xyxy = tuple(_finite_number(value, f"{context}: xyxy") for value in box)
+        x1, y1, x2, y2 = xyxy
+        if x2 <= x1 or y2 <= y1:
+            raise ValueError(f"{context}: box must have positive width and height")
+        if not (0 <= x1 < x2 <= width and 0 <= y1 < y2 <= height):
+            bounds_count += 1
+        confidence = _finite_number(detection.get("confidence"), f"{context}: confidence")
+        if not 0 <= confidence <= 1:
+            raise ValueError(f"{context}: confidence must be in [0, 1]")
+        label = detection.get("label")
+        if not isinstance(label, str) or not label.strip():
+            raise ValueError(f"{context}: label must be a nonempty string")
+        if track in labels and labels[track] != label:
+            raise ValueError(f"{context}: inconsistent label for the same track")
+        labels[track] = label
+        observations.append(TrackingObservation(frame_id=frame, track_id=track, xyxy=xyxy, confidence=confidence))
+    observations.sort(key=lambda observation: (observation.frame_id, observation.track_id))
+    warnings = (f"{bounds_count} prediction boxes extend beyond image bounds; coordinates retained",) if bounds_count else ()
+
+    return TrackingSequence(
+        sequence_id=Path(video_path).stem,
+        frame_count=count,
+        width=width,
+        height=height,
+        fps=fps,
+        track_labels=labels,
+        observations=tuple(observations),
+        source_path=path,
+        source_format="tennisvision_prediction_json",
+        warnings=warnings,
+    )
 
 
 def load_cvat_xml(path: str | Path) -> TrackingSequence:
