@@ -136,6 +136,11 @@ def main():
 
         tracking_summary = compute_tracking_summary(result)
         tracking_stats = compute_tracking_stats(result)
+        # Keep the raw diagnostics alongside predictions for offline evaluation.
+        with (output_dir / "summary_raw.json").open("w") as f:
+            json.dump(tracking_summary, f, indent=2)
+        with (output_dir / "stats_raw.json").open("w") as f:
+            json.dump(tracking_stats, f, indent=2)
         mlflow.log_dict(tracking_summary, "tracking/raw/summary.json")
         mlflow.log_dict(tracking_stats, "tracking/raw/stats.json")
         mlflow.log_metrics({f"raw_{key}": value for key, value in tracking_summary.items()})
